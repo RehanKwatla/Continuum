@@ -1,7 +1,8 @@
 import * as React from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  Brain,
   CircleDashed,
   Database,
   ExternalLink,
@@ -9,15 +10,16 @@ import {
   FolderKanban,
   GitBranch,
   Layers,
+  ListChecks,
+  ScrollText,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
-import { FutureWorkspacePreview } from "@/components/common/FutureWorkspace";
 import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { MetricTile, PageHeader } from "@/components/common/PageHeader";
@@ -46,8 +48,6 @@ export default function ProjectDetails() {
   const { toast } = useToast();
   const deleteProject = useDeleteProject();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const [searchParams] = useSearchParams();
-  const view = searchParams.get("view");
 
   const handleDelete = async () => {
     if (!projectId) return;
@@ -138,20 +138,6 @@ export default function ProjectDetails() {
       />
 
       <ProjectWorkspaceNav projectId={data.id} />
-
-      {view === "memory" || view === "timeline" || view === "handover" ? (
-        <div className="space-y-4">
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            {view === "timeline"
-              ? "A project timeline will be built from source timestamps. It is not computed yet."
-              : view === "handover"
-                ? "A handover brief will be written from reviewed claims. None are available for this project."
-                : "Knowledge memory will collect claims extracted from this project's sources. Extraction is not running."}
-          </p>
-          <FutureWorkspacePreview />
-        </div>
-      ) : (
-      <>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricTile
@@ -325,30 +311,46 @@ export default function ProjectDetails() {
         </CardContent>
       </Card>
 
-      <Card className="border-dashed">
+      <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             Project memory
           </CardTitle>
-          <Badge variant="secondary">Upcoming · Phase 3</Badge>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to={`/projects/${data.id}/memory`}>Open</Link>
+          </Button>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Claim extraction, evidence verification and handover generation are not implemented in
-            this build. The typed claim and verification contracts they will consume already exist,
-            and a claim can only become <span className="text-foreground">Verified</span> through a
-            human reviewer.
+            Reconstruct project knowledge from this project&apos;s authorised sources. Every claim
+            links back to the exact passage it came from, and only a human reviewer can mark a claim{" "}
+            <span className="text-foreground">Verified</span>.
           </p>
-          <div className="flex flex-wrap gap-2 pt-1">
-            {["Claim extraction", "Evidence verification", "Handover generation"].map((item) => (
-              <span
-                key={item}
-                className="inline-flex items-center gap-2 rounded-md border border-border/70 bg-card/40 px-2.5 py-1.5 text-[11px] text-muted-foreground"
-              >
-                <CircleDashed className="h-3.5 w-3.5" />
-                {item}
-              </span>
-            ))}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/projects/${data.id}/memory`}>
+                <Brain className="h-4 w-4" />
+                Memory
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/projects/${data.id}/memory/claims`}>
+                <ListChecks className="h-4 w-4" />
+                Claims
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/projects/${data.id}/memory/conflicts`}>
+                <TriangleAlert className="h-4 w-4" />
+                Conflicts
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/projects/${data.id}/handover`}>
+                <ScrollText className="h-4 w-4" />
+                Handover
+              </Link>
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -387,8 +389,6 @@ export default function ProjectDetails() {
         <FolderKanban className="h-3.5 w-3.5" />
         Project id <span className="mono">{data.id}</span>
       </p>
-      </>
-      )}
     </div>
   );
 }

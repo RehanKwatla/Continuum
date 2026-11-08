@@ -358,22 +358,261 @@ export interface ReadinessResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3 AI contracts (typed, but not yet wired to any agent)
+// Phase 3 intelligence layer (mirrors app/schemas/memory.py)
 // ---------------------------------------------------------------------------
-export interface ClaimContract {
+export type ClaimType =
+  | "decision"
+  | "responsibility"
+  | "ownership"
+  | "task"
+  | "unfinished_work"
+  | "risk"
+  | "dependency"
+  | "technical_constraint"
+  | "operational_procedure"
+  | "open_question"
+  | "architecture"
+  | "process"
+  | "constraint"
+  | "contact"
+  | "status"
+  | "other";
+
+export type ProcessingRunStatus = "pending" | "running" | "completed" | "partial" | "failed";
+
+export type ConflictStatus = "open" | "resolved" | "dismissed";
+
+export type ConflictKind = "value_disagreement" | "changed_over_time";
+
+export type FreshnessStatus =
+  | "current"
+  | "potentially_stale"
+  | "contradicted_by_newer_evidence";
+
+export type OpenQuestionStatus = "open" | "resolved";
+
+export type HandoverStatus = "generated" | "validated" | "failed";
+
+export interface ProcessingRun {
   id: string;
-  text: string;
-  claim_type: string;
-  entity: string | null;
-  source_span_ids: string[];
-  access_label: AccessLabel;
-  critical: boolean;
-  status: ClaimStatus;
+  project_id: string;
+  status: ProcessingRunStatus;
+  source_count: number;
+  claim_count: number;
+  verified_count: number;
+  uncertain_count: number;
+  conflict_count: number;
+  open_question_count: number;
+  model_name: string | null;
+  error_message: string | null;
+  errors: Array<Record<string, unknown>>;
+  stats: Record<string, unknown>;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
 }
 
-export interface VerificationContract {
-  claim_id: string;
+export interface ProcessingRunListResponse {
+  items: ProcessingRun[];
+  meta: PageMeta;
+}
+
+export interface EvidenceRef {
+  id: string;
+  source_id: string;
+  span_id: string | null;
+  source_name: string | null;
+  source_type: SourceType | null;
+  source_location: string | null;
+  start_offset: number | null;
+  end_offset: number | null;
+  supporting_quote: string | null;
+  access_label: AccessLabel | null;
+  source_date: string | null;
+  author: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface VerificationRead {
+  id: string;
   verdict: VerificationVerdict;
   supporting_quote: string | null;
+  quote_validated: boolean;
   contradicted_by: string[];
+  explanation: string | null;
+  confidence: number | null;
+  model_name: string | null;
+  created_at: string;
+}
+
+export interface ClaimHistoryRead {
+  id: string;
+  action: string;
+  from_status: ClaimStatus | null;
+  to_status: ClaimStatus | null;
+  note: string | null;
+  actor_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ClaimSummary {
+  id: string;
+  project_id: string;
+  text: string;
+  claim_type: ClaimType;
+  entity: string | null;
+  status: ClaimStatus;
+  critical: boolean;
+  author: string | null;
+  confidence: number | null;
+  reasoning_summary: string | null;
+  access_label: AccessLabel;
+  reviewed_at: string | null;
+  review_note: string | null;
+  verified_at: string | null;
+  verified_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+  evidence_count: number;
+  source_date: string | null;
+}
+
+export interface ClaimDetail extends ClaimSummary {
+  evidence: EvidenceRef[];
+  verifications: VerificationRead[];
+  history: ClaimHistoryRead[];
+  conflicts: ConflictSummary[];
+}
+
+export interface ClaimListResponse {
+  items: ClaimSummary[];
+  meta: PageMeta;
+  status_counts: Record<string, number>;
+  type_counts: Record<string, number>;
+}
+
+export interface ClaimListParams {
+  category?: ClaimType;
+  status?: ClaimStatus;
+  critical?: boolean;
+  entity?: string;
+  search?: string;
+  order?: "recent" | "oldest" | "timeline";
+  page?: number;
+  page_size?: number;
+}
+
+export interface ClaimReviewInput {
+  action: "approve" | "reject";
+  note?: string | null;
+}
+
+export interface ConflictSummary {
+  id: string;
+  project_id: string;
+  entity: string | null;
+  claim_type: ClaimType | null;
+  property_key: string | null;
+  kind: string;
+  status: ConflictStatus;
+  summary: string | null;
+  resolution_note: string | null;
+  resolved_by_id: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  claims: ClaimSummary[];
+}
+
+export interface ConflictListResponse {
+  items: ConflictSummary[];
+  meta: PageMeta;
+}
+
+export interface ConflictListParams {
+  status?: ConflictStatus;
+  kind?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface ConflictResolveInput {
+  action: "resolve" | "dismiss";
+  note: string;
+  chosen_claim_id?: string | null;
+}
+
+export interface OpenQuestionRead {
+  id: string;
+  project_id: string;
+  claim_id: string | null;
+  question: string;
+  context: string | null;
+  entity: string | null;
+  status: OpenQuestionStatus;
+  access_label: AccessLabel;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+export interface OpenQuestionListResponse {
+  items: OpenQuestionRead[];
+  meta: PageMeta;
+}
+
+export interface StaleSourceRead {
+  id: string;
+  source_name: string;
+  source_type: SourceType;
+  author: string | null;
+  created_at_source: string | null;
+  freshness: FreshnessStatus;
+  freshness_checked_at: string | null;
+  warnings: Array<Record<string, unknown>>;
+}
+
+export interface UncertaintyResponse {
+  unsupported_claims: ClaimSummary[];
+  open_questions: OpenQuestionRead[];
+  stale_sources: StaleSourceRead[];
+}
+
+export interface ProjectMemory {
+  project_id: string;
+  reconstructed: boolean;
+  version: number | null;
+  summary: string | null;
+  stats: Record<string, unknown>;
+  generated_at: string | null;
+  last_run_id: string | null;
+  last_run: ProcessingRun | null;
+}
+
+export interface ReconstructInput {
+  source_ids?: string[] | null;
+}
+
+export interface HandoverStatementRead {
+  text: string;
+  claim_ids: string[];
+}
+
+export interface HandoverSectionRead {
+  key: string;
+  title: string;
+  statements: HandoverStatementRead[];
+}
+
+export interface HandoverRead {
+  id: string;
+  project_id: string;
+  status: HandoverStatus;
+  summary: string | null;
+  sections: HandoverSectionRead[];
+  claim_ids: string[];
+  validation_errors: Array<Record<string, unknown>>;
+  model_name: string | null;
+  created_at: string;
+  updated_at: string;
 }

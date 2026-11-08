@@ -1,13 +1,11 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  Brain,
   ChevronsUpDown,
   FolderKanban,
   LayoutDashboard,
   LogOut,
   Plug,
-  ScrollText,
   Settings,
   X,
 } from "lucide-react";
@@ -32,8 +30,6 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Overview", Icon: LayoutDashboard },
   { to: "/projects", label: "Projects", Icon: FolderKanban },
   { to: "/sources", label: "Sources", Icon: Plug },
-  { to: "/memory", label: "Knowledge Memory", Icon: Brain, soon: true },
-  { to: "/handovers", label: "Handovers", Icon: ScrollText, soon: true },
   { to: "/settings", label: "Settings", Icon: Settings },
 ] as const;
 
@@ -115,7 +111,7 @@ function WorkspaceSelector() {
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-0.5" aria-label="Primary">
-      {NAV_ITEMS.map(({ to, label, Icon, ...rest }) => (
+      {NAV_ITEMS.map(({ to, label, Icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -131,11 +127,6 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
         >
           <Icon className="h-4 w-4" />
           <span className="truncate">{label}</span>
-          {"soon" in rest && rest.soon ? (
-            <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-              Soon
-            </span>
-          ) : null}
         </NavLink>
       ))}
     </nav>

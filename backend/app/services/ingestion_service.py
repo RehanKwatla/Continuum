@@ -26,6 +26,7 @@ from app.models.enums import AccessLabel, ProcessingStatus, SourceType
 from app.models.project import Project
 from app.models.source import Source
 from app.schemas.source import IngestionResult, UploadResponse
+from app.services.evidence_span_service import EvidenceSpanService
 from app.services.file_parser import (
     ParsedDocument,
     ParsedSegment,
@@ -227,7 +228,7 @@ class IngestionService:
             mime_type=_MIME_TYPES.get(actual_format),
             size_bytes=len(payload),
         )
-        return self._persist(project, normalized, display_name=filename)
+        return self._persist(project, normalized, display_name=filename, segments=redacted_doc.segments)
 
     # ------------------------------------------------------------------
     # Archives
@@ -440,7 +441,12 @@ class IngestionService:
     # Persistence
     # ------------------------------------------------------------------
     def _persist(
-        self, project: Project, normalized: NormalizedSource, *, display_name: str
+        self,
+        project: Project,
+        normalized: NormalizedSource,
+        *,
+        display_name: str,
+        segments: Sequence[ParsedSegment] | None = None,
     ) -> IngestionResult:
         content_hash = normalized.content_hash
 
@@ -481,7 +487,7 @@ class IngestionService:
         )
         self.db.add(source)
         try:
-            self.db.commit()
+            self.db.flush()
         except IntegrityError:
             self.db.rollback()
             duplicate = self.db.execute(
@@ -499,6 +505,15 @@ class IngestionService:
                 duplicate_of=duplicate,
             )
 
+        # Backend-owned evidence spans: the AI layer may only cite these.
+        # Isolated in a savepoint so a span failure never loses the source.
+        try:
+            with self.db.begin_nested():
+                EvidenceSpanService(self.db).ensure_spans(source, segments)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Evidence span preparation failed for %s", display_name)
+
+        self.db.commit()
         self.db.refresh(source)
         return IngestionResult(
             filename=display_name,

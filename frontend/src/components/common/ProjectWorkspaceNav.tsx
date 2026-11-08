@@ -3,33 +3,37 @@ import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { id: "overview", label: "Overview", suffix: "" },
-  { id: "sources", label: "Sources", suffix: "/sources" },
-  { id: "memory", label: "Memory", suffix: "?view=memory", soon: true },
-  { id: "timeline", label: "Timeline", suffix: "?view=timeline", soon: true },
-  { id: "handover", label: "Handover", suffix: "?view=handover", soon: true },
+  { id: "overview", label: "Overview", to: (id: string) => `/projects/${id}` },
+  { id: "sources", label: "Sources", to: (id: string) => `/projects/${id}/sources` },
+  { id: "memory", label: "Memory", to: (id: string) => `/projects/${id}/memory` },
+  { id: "timeline", label: "Timeline", to: (id: string) => `/projects/${id}/memory/timeline` },
+  { id: "handover", label: "Handover", to: (id: string) => `/projects/${id}/handover` },
 ] as const;
+
+function isTabActive(id: string, projectId: string, pathname: string): boolean {
+  const base = `/projects/${projectId}`;
+  if (id === "overview") return pathname === base;
+  if (id === "sources") return pathname.startsWith(`${base}/sources`);
+  if (id === "memory") {
+    return pathname.startsWith(`${base}/memory`) && !pathname.startsWith(`${base}/memory/timeline`);
+  }
+  if (id === "timeline") return pathname.startsWith(`${base}/memory/timeline`);
+  if (id === "handover") return pathname.startsWith(`${base}/handover`);
+  return false;
+}
 
 export function ProjectWorkspaceNav({ projectId }: { projectId: string }) {
   const location = useLocation();
-  const view = new URLSearchParams(location.search).get("view");
-  const onProjectRoot = location.pathname === `/projects/${projectId}`;
 
   return (
     <div className="border-b border-border">
       <nav aria-label="Project" className="-mb-px flex gap-1 overflow-x-auto">
         {TABS.map((tab) => {
-          const to = `/projects/${projectId}${tab.suffix}`;
-          const active = tab.id === "sources"
-            ? location.pathname.startsWith(`/projects/${projectId}/sources`)
-            : tab.id === "overview"
-              ? onProjectRoot && !view
-              : onProjectRoot && view === tab.id;
-
+          const active = isTabActive(tab.id, projectId, location.pathname);
           return (
             <NavLink
               key={tab.id}
-              to={to}
+              to={tab.to(projectId)}
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors",
                 active
@@ -39,11 +43,6 @@ export function ProjectWorkspaceNav({ projectId }: { projectId: string }) {
               aria-current={active ? "page" : undefined}
             >
               {tab.label}
-              {"soon" in tab && tab.soon ? (
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Soon
-                </span>
-              ) : null}
             </NavLink>
           );
         })}

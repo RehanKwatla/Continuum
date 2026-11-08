@@ -8,7 +8,7 @@ from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, Un
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.models.enums import AccessLabel, ProcessingStatus, SourceType
+from app.models.enums import AccessLabel, FreshnessStatus, ProcessingStatus, SourceType
 from app.models.types import CreatedAt, JsonArray, JsonObject, UuidFK, UuidPK, sa_enum
 
 
@@ -52,6 +52,20 @@ class Source(Base):
     )
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
+    # --- Phase 3 freshness ---------------------------------------------------
+    # Deterministic staleness assessment; a *potentially stale* source is
+    # flagged for review rather than silently replaced by newer information.
+    freshness: Mapped[FreshnessStatus] = mapped_column(
+        sa_enum(FreshnessStatus, "source_freshness", length=32),
+        nullable=False,
+        default=FreshnessStatus.CURRENT,
+        server_default=FreshnessStatus.CURRENT.value,
+        index=True,
+    )
+    freshness_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # --- Ingestion bookkeeping ----------------------------------------------
     storage_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -64,6 +78,9 @@ class Source(Base):
 
     project: Mapped["Project"] = relationship(back_populates="sources")  # noqa: F821
     evidence: Mapped[list["Evidence"]] = relationship(  # noqa: F821
+        back_populates="source", cascade="all, delete-orphan"
+    )
+    spans: Mapped[list["EvidenceSpan"]] = relationship(  # noqa: F821
         back_populates="source", cascade="all, delete-orphan"
     )
 

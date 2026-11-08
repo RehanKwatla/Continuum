@@ -17,6 +17,20 @@ export const queryKeys = {
 
   dashboard: ["dashboard"] as const,
 
+  memory: (projectId: string) => ["projects", projectId, "memory"] as const,
+  processingRuns: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "memory", "runs", params ?? {}] as const,
+  claims: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "memory", "claims", params ?? {}] as const,
+  claim: (projectId: string, claimId: string) =>
+    ["projects", projectId, "memory", "claims", claimId] as const,
+  conflicts: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "memory", "conflicts", params ?? {}] as const,
+  questions: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "memory", "questions", params ?? {}] as const,
+  uncertainty: (projectId: string) => ["projects", projectId, "memory", "uncertainty"] as const,
+  handover: (projectId: string) => ["projects", projectId, "handover"] as const,
+
   githubStatus: ["github", "status"] as const,
   githubBoundary: ["github", "boundary"] as const,
   githubRepositories: ["github", "repositories"] as const,

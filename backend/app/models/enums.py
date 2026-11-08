@@ -56,14 +56,44 @@ class AccessLabel(StrEnum):
 
 
 class ClaimType(StrEnum):
+    """Knowledge categories the Extractor may emit.
+
+    The ten Phase 3 categories are listed first; the remaining members are the
+    Phase 1/2 contract values retained for backward compatibility.
+    """
+
     DECISION = "decision"
+    RESPONSIBILITY = "responsibility"
+    OWNERSHIP = "ownership"
+    TASK = "task"
+    UNFINISHED_WORK = "unfinished_work"
+    RISK = "risk"
+    DEPENDENCY = "dependency"
+    TECHNICAL_CONSTRAINT = "technical_constraint"
+    OPERATIONAL_PROCEDURE = "operational_procedure"
+    OPEN_QUESTION = "open_question"
+    # --- retained Phase 1/2 contract values ---
     ARCHITECTURE = "architecture"
     PROCESS = "process"
     CONSTRAINT = "constraint"
-    RISK = "risk"
     CONTACT = "contact"
     STATUS = "status"
     OTHER = "other"
+
+
+#: The ten categories the Phase 3 Extractor is instructed to produce.
+EXTRACTABLE_CLAIM_TYPES: tuple[ClaimType, ...] = (
+    ClaimType.DECISION,
+    ClaimType.RESPONSIBILITY,
+    ClaimType.OWNERSHIP,
+    ClaimType.TASK,
+    ClaimType.UNFINISHED_WORK,
+    ClaimType.RISK,
+    ClaimType.DEPENDENCY,
+    ClaimType.TECHNICAL_CONSTRAINT,
+    ClaimType.OPERATIONAL_PROCEDURE,
+    ClaimType.OPEN_QUESTION,
+)
 
 
 class ClaimStatus(StrEnum):
@@ -79,6 +109,41 @@ class VerificationVerdict(StrEnum):
     SUPPORTS = "supports"
     PARTLY = "partly"
     NONE = "none"
+
+
+class ConflictStatus(StrEnum):
+    """Lifecycle of a detected contradiction between two claims."""
+
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
+class FreshnessStatus(StrEnum):
+    """Deterministic staleness assessment for a source."""
+
+    CURRENT = "current"
+    POTENTIALLY_STALE = "potentially_stale"
+    CONTRADICTED_BY_NEWER_EVIDENCE = "contradicted_by_newer_evidence"
+
+
+class OpenQuestionStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+
+
+class ProcessingRunStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
+class HandoverStatus(StrEnum):
+    GENERATED = "generated"
+    VALIDATED = "validated"
+    FAILED = "failed"
 
 
 class GitHubSubjectType(StrEnum):

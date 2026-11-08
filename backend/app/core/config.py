@@ -72,9 +72,24 @@ class Settings(BaseSettings):
     max_zip_entry_bytes: int = 10 * 1024 * 1024
     max_content_chars: int = 400_000
 
-    # --- AI (Phase 3 contract only) -----------------------------------------
+    # --- AI (Phase 3 intelligence layer) -------------------------------------
+    # The model identifier is *pinned through configuration* — never assumed by
+    # the agent code — so the provider/model can be changed without a code edit.
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.0-flash"
+    gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_timeout_seconds: float = 90.0
+    gemini_max_output_tokens: int = 8192
+    # Workflow safety limits.
+    ai_max_sources_per_run: int = 25
+    ai_max_spans_per_prompt: int = 40
+    ai_max_claims_per_source: int = 25
+    ai_max_retries: int = 2
+
+    @property
+    def ai_configured(self) -> bool:
+        """True when a real model provider is usable (no key ⇒ no fabrication)."""
+        return bool(self.gemini_api_key)
 
     @field_validator("cors_origins", mode="before")
     @classmethod

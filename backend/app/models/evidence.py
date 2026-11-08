@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +23,10 @@ class Evidence(Base):
     )
     source_id: Mapped[UuidFK] = mapped_column(
         ForeignKey("sources.id", ondelete="CASCADE"), index=True
+    )
+    # Exact traceable span this evidence quote came from (backend-generated).
+    span_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("evidence_spans.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # Human-readable locator, e.g. "README.md#L12-L18" or "page 3".
     source_location: Mapped[str | None] = mapped_column(String(500), nullable=True)

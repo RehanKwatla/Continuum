@@ -14,8 +14,15 @@ import SourceDetails from "@/pages/SourceDetails";
 import UploadSources from "@/pages/UploadSources";
 import GitHubRepositories from "@/pages/GitHubRepositories";
 import NotFound from "@/pages/NotFound";
-import ComingSoon from "@/pages/ComingSoon";
 import Settings from "@/pages/Settings";
+import { MemoryLayout } from "@/components/intelligence/MemoryLayout";
+import ProjectMemory from "@/pages/ProjectMemory";
+import ClaimsExplorer from "@/pages/ClaimsExplorer";
+import ClaimDetailPage from "@/pages/ClaimDetailPage";
+import ConflictCentre from "@/pages/ConflictCentre";
+import UncertaintyCentre from "@/pages/UncertaintyCentre";
+import DecisionTimeline from "@/pages/DecisionTimeline";
+import HandoverPreview from "@/pages/HandoverPreview";
 
 /**
  * Every authenticated screen renders inside the AppShell via ProtectedRoute,
@@ -45,29 +52,19 @@ export function AppRouter() {
         <Route path="/projects/:projectId/sources/upload" element={<UploadSources />} />
         <Route path="/projects/:projectId/sources/github" element={<GitHubRepositories />} />
 
+        <Route path="/projects/:projectId/memory" element={<MemoryLayout />}>
+          <Route index element={<ProjectMemory />} />
+          <Route path="claims" element={<ClaimsExplorer />} />
+          <Route path="claims/:claimId" element={<ClaimDetailPage />} />
+          <Route path="conflicts" element={<ConflictCentre />} />
+          <Route path="uncertainty" element={<UncertaintyCentre />} />
+          <Route path="timeline" element={<DecisionTimeline />} />
+        </Route>
+        <Route path="/projects/:projectId/handover" element={<HandoverPreview />} />
+
         <Route path="/sources" element={<Sources />} />
         <Route path="/sources/:sourceId" element={<SourceDetails />} />
 
-        <Route
-          path="/memory"
-          element={
-            <ComingSoon
-              eyebrow="Later phase"
-              title="Knowledge Memory"
-              description="Claims, evidence and conflicts will live here once extraction is implemented. Nothing on this page is generated from your sources."
-            />
-          }
-        />
-        <Route
-          path="/handovers"
-          element={
-            <ComingSoon
-              eyebrow="Later phase"
-              title="Handovers"
-              description="Handover briefs will be assembled from reviewed claims. This screen is a prepared interface, not a generated document."
-            />
-          }
-        />
         <Route path="/settings" element={<Settings />} />
       </Route>
 
