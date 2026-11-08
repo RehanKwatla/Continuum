@@ -37,6 +37,11 @@ os.environ["MAX_ZIP_EXPANSION_BYTES"] = str(8 * 1024 * 1024)
 # Keep public demo mode off by default during core auth unit tests,
 # so that test suites expecting 401s on unauthenticated calls test the real gate.
 os.environ["PUBLIC_DEMO_MODE"] = "false"
+# Keep GitHub integration unconfigured by default so boundary tests assert remediation
+os.environ["GITHUB_TOKEN"] = ""
+os.environ["GITHUB_CLIENT_ID"] = ""
+os.environ["GITHUB_CLIENT_SECRET"] = ""
+os.environ["GITHUB_TOKEN_ENCRYPTION_KEY"] = ""
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

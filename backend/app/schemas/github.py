@@ -16,6 +16,10 @@ class GitHubConnectResponse(BaseModel):
     state: str = Field(description="Opaque, signed CSRF state value.")
 
 
+class GitHubTokenConnectRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=500, description="GitHub Personal Access Token (PAT).")
+
+
 class GitHubStatusResponse(BaseModel):
     configured: bool = Field(description="True when server-side OAuth credentials are present.")
     connected: bool = False

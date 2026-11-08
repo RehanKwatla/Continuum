@@ -70,11 +70,12 @@ class Settings(BaseSettings):
     #: Per-client-IP request budget for token-less (public) requests.
     public_demo_rate_limit_per_minute: int = 180
 
-    # --- GitHub OAuth --------------------------------------------------------
+    # --- GitHub OAuth & Personal Access Token --------------------------------
     github_client_id: str | None = None
     github_client_secret: str | None = None
     github_oauth_redirect_uri: str = "http://localhost:8000/api/v1/github/callback"
     github_oauth_frontend_redirect: str = "http://localhost:5173/sources"
+    github_token: str | None = None
     # Fernet key used to encrypt GitHub access tokens at rest.
     github_token_encryption_key: str | None = None
     github_api_base_url: str = "https://api.github.com"
@@ -124,9 +125,12 @@ class Settings(BaseSettings):
     @property
     def github_oauth_configured(self) -> bool:
         return bool(
-            self.github_client_id
-            and self.github_client_secret
-            and self.github_token_encryption_key
+            (
+                self.github_client_id
+                and self.github_client_secret
+                and self.github_token_encryption_key
+            )
+            or self.github_token
         )
 
     @model_validator(mode="after")

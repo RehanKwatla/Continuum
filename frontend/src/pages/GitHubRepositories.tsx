@@ -32,6 +32,7 @@ import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  useConnectGitHubToken,
   useGitHubBoundary,
   useGitHubRepositories,
   useGitHubStatus,
@@ -105,6 +106,7 @@ export default function GitHubRepositories() {
   const status = useGitHubStatus();
   const boundary = useGitHubBoundary();
   const startConnect = useStartGitHubConnect();
+  const connectToken = useConnectGitHubToken();
   const importRepo = useImportGitHubRepository(projectId ?? "");
   const { toast } = useToast();
 
@@ -116,6 +118,7 @@ export default function GitHubRepositories() {
   const [selected, setSelected] = React.useState<GitHubRepositorySummary | null>(null);
   const [options, setOptions] = React.useState<ImportOptions>(DEFAULT_OPTIONS);
   const [outcome, setOutcome] = React.useState<GitHubImportResponse | null>(null);
+  const [patToken, setPatToken] = React.useState("");
 
   const visibleRepositories = React.useMemo(() => {
     const items = repositories.data?.items ?? [];
@@ -127,6 +130,25 @@ export default function GitHubRepositories() {
         (repository.language ?? "").toLowerCase().includes(needle),
     );
   }, [repositories.data, filter]);
+
+  const handleConnectToken = async () => {
+    if (!patToken.trim()) return;
+    try {
+      await connectToken.mutateAsync(patToken.trim());
+      setPatToken("");
+      toast({
+        title: "GitHub connected",
+        description: "Personal access token authenticated successfully.",
+        variant: "success",
+      });
+    } catch (caught) {
+      toast({
+        title: "Token authentication failed",
+        description: toErrorMessage(caught),
+        variant: "error",
+      });
+    }
+  };
 
   const handleConnect = async () => {
     try {
@@ -220,9 +242,42 @@ export default function GitHubRepositories() {
         </Card>
       ) : null}
 
-        {
-          isDemoSession?(
-        <Card className = "border-primary/40 bg-primary/10" >
+      {status.isSuccess && connected ? (
+        <Card className="border-border/70 bg-card/40">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div className="flex items-center gap-3">
+              {status.data?.avatar_url ? (
+                <img
+                  src={status.data.avatar_url}
+                  alt={status.data.login ?? "GitHub user"}
+                  className="h-8 w-8 rounded-full border border-border"
+                />
+              ) : (
+                <Github className="h-6 w-6 text-muted-foreground" />
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold">{status.data?.login}</span>
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                    Connected
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Scopes: {status.data?.scopes?.join(", ") || "repo, read:user"}
+                </p>
+              </div>
+            </div>
+            {isDemoSession ? (
+              <Badge variant="secondary" className="text-[11px]">
+                Repository browsing enabled in Demo Mode
+              </Badge>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {isDemoSession && !connected ? (
+        <Card className="border-primary/40 bg-primary/10">
           <CardHeader>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-primary" />
@@ -243,26 +298,49 @@ export default function GitHubRepositories() {
             </Button>
           </CardContent>
         </Card>
-  ) : status.isSuccess && configured && !connected ? (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xs font-medium text-muted-foreground">
-          Authorise GitHub
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Continuum requests read-only access. The OAuth token is exchanged and encrypted
-          server-side; it is never sent to this page or stored in the browser.
-        </p>
-        <Button size="sm" onClick={() => void handleConnect()} disabled={startConnect.isPending}>
-          <Github className="h-4 w-4" />
-          {startConnect.isPending ? "Redirecting…" : "Connect GitHub"}
-        </Button>
-      </CardContent>
-    </Card>
-  ) : null
-}
+      ) : status.isSuccess && !connected ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xs font-medium text-muted-foreground">
+              Connect GitHub
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {configured ? (
+              <div className="space-y-2">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Authorise via GitHub OAuth (redirects to GitHub):
+                </p>
+                <Button size="sm" onClick={() => void handleConnect()} disabled={startConnect.isPending}>
+                  <Github className="h-4 w-4" />
+                  {startConnect.isPending ? "Redirecting…" : "Connect with GitHub OAuth"}
+                </Button>
+              </div>
+            ) : null}
+            <div className="space-y-2 pt-2">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Or connect with a Personal Access Token (PAT):
+              </p>
+              <div className="flex max-w-md gap-2">
+                <Input
+                  type="password"
+                  placeholder="ghp_..."
+                  value={patToken}
+                  onChange={(e) => setPatToken(e.target.value)}
+                  className="font-mono text-xs"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => void handleConnectToken()}
+                  disabled={connectToken.isPending || !patToken.trim()}
+                >
+                  {connectToken.isPending ? "Connecting…" : "Connect Token"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
 {
   connected ? (

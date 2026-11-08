@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  connectGitHubToken,
   disconnectGitHub,
   getGitHubBoundary,
   getGitHubRepository,
@@ -54,6 +55,16 @@ export function useStartGitHubConnect() {
     mutationFn: startGitHubConnect,
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.githubStatus });
+    },
+  });
+}
+
+export function useConnectGitHubToken() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (token: string) => connectGitHubToken(token),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["github"] });
     },
   });
 }

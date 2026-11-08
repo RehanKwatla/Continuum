@@ -22,6 +22,10 @@ export function startGitHubConnect(): Promise<GitHubConnectResponse> {
   return apiPost<GitHubConnectResponse>("/github/connect");
 }
 
+export function connectGitHubToken(token: string): Promise<GitHubStatus> {
+  return apiPost<GitHubStatus>("/github/token", { token });
+}
+
 export function disconnectGitHub(): Promise<null> {
   return apiDelete<null>("/github/disconnect");
 }

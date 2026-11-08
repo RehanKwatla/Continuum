@@ -35,6 +35,7 @@ from app.schemas.github import (
     GitHubRepositoryListResponse,
     GitHubRepositorySummary,
     GitHubStatusResponse,
+    GitHubTokenConnectRequest,
 )
 from app.services.github_service import MISSING_CONFIGURATION_HELP, GitHubService
 
@@ -74,6 +75,19 @@ def github_boundary(settings: AppSettings) -> GitHubImportBoundary:
 def github_connect(user: CurrentUser, db: DbSession) -> GitHubConnectResponse:
     authorize_url, state = GitHubService(db).start_connect(user)
     return GitHubConnectResponse(authorize_url=authorize_url, state=state)
+
+
+@router.post(
+    "/github/token",
+    response_model=GitHubStatusResponse,
+    summary="Connect a GitHub Personal Access Token (PAT) directly",
+)
+def github_connect_token(
+    payload: GitHubTokenConnectRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> GitHubStatusResponse:
+    return GitHubService(db).connect_token(user, payload.token)
 
 
 @router.get(

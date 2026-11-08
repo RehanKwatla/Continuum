@@ -456,16 +456,38 @@ class GitHubService:
 
     # --- connection ----------------------------------------------------
     def status(self, user: User) -> GitHubStatusResponse:
-        configured = self.oauth.configured and self.cipher.configured
         connection = self.connections.get_for_user(user.id)
+        configured = bool(
+            (self.oauth.configured and self.cipher.configured)
+            or self.settings.github_token
+            or connection is not None
+        )
         if connection is None:
+            if self.settings.github_token:
+                try:
+                    profile = self.oauth.fetch_authenticated_user(self.settings.github_token)
+                    return GitHubStatusResponse(
+                        configured=True,
+                        connected=True,
+                        login=profile.get("login"),
+                        avatar_url=profile.get("avatar_url"),
+                        github_user_id=str(profile.get("id")) if profile.get("id") is not None else None,
+                        scopes=["repo", "read:user", "read:org", "user:email"],
+                    )
+                except Exception as exc:
+                    logger.warning("Could not fetch user profile with github_token: %s", exc)
+                    return GitHubStatusResponse(
+                        configured=True,
+                        connected=False,
+                        message="GitHub token configured but user profile fetch failed.",
+                    )
             return GitHubStatusResponse(
                 configured=configured,
                 connected=False,
                 message=(
                     None
                     if configured
-                    else "GitHub OAuth is not configured on the server. "
+                    else "GitHub OAuth or GITHUB_TOKEN is not configured on the server. "
                     "Set the GITHUB_* environment variables to enable it."
                 ),
             )
@@ -478,6 +500,33 @@ class GitHubService:
             scopes=(connection.scopes or "").split() if connection.scopes else list(GITHUB_SCOPES),
             connected_at=connection.connected_at,
         )
+
+    def connect_token(self, user: User, token: str) -> GitHubStatusResponse:
+        """Connect a GitHub Personal Access Token (PAT) directly."""
+        profile = self.oauth.fetch_authenticated_user(token)
+        # Use existing cipher or derive a Fernet key if encryption key is unconfigured
+        cipher = self.cipher
+        if not cipher.configured:
+            cipher = TokenCipher(Fernet.generate_key().decode())
+        encrypted = cipher.encrypt(token)
+        self.connections.upsert(
+            user_id=user.id,
+            encrypted_access_token=encrypted,
+            github_user_id=str(profile.get("id")) if profile.get("id") is not None else None,
+            github_login=profile.get("login"),
+            github_avatar_url=profile.get("avatar_url"),
+            scopes="repo read:user read:org user:email",
+            token_type="bearer",
+        )
+        self.db.commit()
+        audit_service.record(
+            self.db,
+            action="github.connected",
+            user_id=user.id,
+            resource_type="github_connection",
+            metadata={"login": profile.get("login"), "type": "pat"},
+        )
+        return self.status(user)
 
     def start_connect(self, user: User) -> tuple[str, str]:
         self.oauth.ensure_configured()
@@ -531,13 +580,15 @@ class GitHubService:
 
     def _client_for(self, user: User) -> GitHubClient:
         connection = self.connections.get_for_user(user.id)
-        if connection is None:
-            raise AuthError(
-                "No GitHub account is connected. Connect GitHub before importing sources.",
-                code="github_not_connected",
-            )
-        token = self.cipher.decrypt(connection.encrypted_access_token)
-        return GitHubClient(token, self.settings)
+        if connection is not None:
+            token = self.cipher.decrypt(connection.encrypted_access_token)
+            return GitHubClient(token, self.settings)
+        if self.settings.github_token:
+            return GitHubClient(self.settings.github_token, self.settings)
+        raise AuthError(
+            "No GitHub account is connected. Connect GitHub before importing sources.",
+            code="github_not_connected",
+        )
 
     # --- repositories --------------------------------------------------
     def list_repositories(self, user: User, *, limit: int = 100) -> list[GitHubRepositorySummary]:
