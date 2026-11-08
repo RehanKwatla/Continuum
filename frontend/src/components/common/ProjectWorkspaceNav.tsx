@@ -9,6 +9,12 @@ const TABS = [
   { id: "review", label: "Review queue", to: (id: string) => `/projects/${id}/memory/review` },
   { id: "timeline", label: "Timeline", to: (id: string) => `/projects/${id}/memory/timeline` },
   { id: "handover", label: "Handover", to: (id: string) => `/projects/${id}/handover` },
+  { id: "readiness", label: "Readiness", to: (id: string) => `/projects/${id}/readiness` },
+  { id: "successor-workspace", label: "Successor", to: (id: string) => `/projects/${id}/successor-workspace` },
+  { id: "successor-checklist", label: "Checklist", to: (id: string) => `/projects/${id}/successor-checklist` },
+  { id: "knowledge-risk", label: "Knowledge risk", to: (id: string) => `/projects/${id}/knowledge-risk` },
+  { id: "evaluation", label: "Evaluation", to: (id: string) => `/projects/${id}/evaluation` },
+  { id: "system-health", label: "System health", to: (id: string) => `/projects/${id}/system-health` },
   { id: "audit", label: "Audit", to: (id: string) => `/projects/${id}/audit` },
 ] as const;
 
@@ -22,6 +28,12 @@ function isTabActive(id: string, projectId: string, pathname: string): boolean {
   if (id === "review") return pathname.startsWith(`${base}/memory/review`);
   if (id === "timeline") return pathname.startsWith(`${base}/memory/timeline`);
   if (id === "handover") return pathname.startsWith(`${base}/handover`);
+  if (id === "readiness") return pathname.startsWith(`${base}/readiness`);
+  if (id === "successor-workspace") return pathname.startsWith(`${base}/successor-workspace`);
+  if (id === "successor-checklist") return pathname.startsWith(`${base}/successor-checklist`);
+  if (id === "knowledge-risk") return pathname.startsWith(`${base}/knowledge-risk`);
+  if (id === "evaluation") return pathname.startsWith(`${base}/evaluation`);
+  if (id === "system-health") return pathname.startsWith(`${base}/system-health`);
   if (id === "audit") return pathname.startsWith(`${base}/audit`);
   return false;
 }

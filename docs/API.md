@@ -1,6 +1,6 @@
 # Continuum — API Reference
 
-**Agentic Project Continuity Platform** · Phase 1 (Foundation) + Phase 2 (Source Ingestion)
+**Agentic Project Continuity Platform** · Phases 1–5 (Foundation → Source Ingestion → Project Memory → Review/Handover → Readiness & Evaluation)
 
 > "People may leave. The knowledge shouldn't have to."
 
@@ -450,11 +450,120 @@ Response:
 | GET | `/api/v1/github/repositories` | auth | List authorised repos |
 | GET | `/api/v1/github/repository` | auth | Repo detail |
 | POST | `/api/v1/projects/{project_id}/github/import` | member | Import repo artefacts |
+| POST | `/api/v1/projects/{project_id}/memory/reconstruct` | member | Run the reconstruction workflow |
+| GET | `/api/v1/projects/{project_id}/memory` | viewer | Reconstructed project memory |
+| GET | `/api/v1/projects/{project_id}/processing-runs` | viewer | Ingestion/AI run history |
+| GET | `/api/v1/projects/{project_id}/review-queue` | viewer | Claims awaiting review |
+| POST | `/api/v1/projects/{project_id}/claims/{claim_id}/review` | member | Record a review decision |
+| POST | `/api/v1/projects/{project_id}/claims/{claim_id}/approve` | member | Approve (human-only `Verified`) |
+| POST | `/api/v1/projects/{project_id}/claims/{claim_id}/reject` | member | Reject a claim |
+| POST | `/api/v1/projects/{project_id}/claims/{claim_id}/request-clarification` | member | Ask for clarification |
+| POST | `/api/v1/projects/{project_id}/claims/{claim_id}/edit` | member | Edit claim text |
+| GET | `/api/v1/projects/{project_id}/claims` | viewer | List claims |
+| GET | `/api/v1/projects/{project_id}/claims/{claim_id}` | viewer | Claim detail |
+| POST | `/api/v1/projects/{project_id}/claims/{claim_id}/verify` | member | Run/record AI verification |
+| GET | `/api/v1/projects/{project_id}/conflicts` | viewer | List conflicts |
+| GET | `/api/v1/projects/{project_id}/conflicts/{conflict_id}` | viewer | Conflict detail |
+| POST | `/api/v1/projects/{project_id}/conflicts/{conflict_id}/resolve` | member | Resolve a conflict |
+| GET | `/api/v1/projects/{project_id}/questions` | viewer | Open questions |
+| GET | `/api/v1/projects/{project_id}/uncertainty` | viewer | Uncertainty centre |
+| POST | `/api/v1/projects/{project_id}/handovers/generate` | member | Generate a handover |
+| GET | `/api/v1/projects/{project_id}/handovers` | viewer | List handovers |
+| GET | `/api/v1/projects/{project_id}/handovers/{handover_id}` | viewer | Handover detail |
+| GET | `/api/v1/projects/{project_id}/handovers/{handover_id}/versions[/{n}]` | viewer | Handover versions |
+| PATCH | `/api/v1/projects/{project_id}/handovers/{handover_id}` | member | Edit a draft version |
+| POST | `/api/v1/projects/{project_id}/handovers/{handover_id}/submit` | member | Submit for review |
+| POST | `/api/v1/projects/{project_id}/handovers/{handover_id}/approve` | admin | Approve |
+| POST | `/api/v1/projects/{project_id}/handovers/{handover_id}/publish` | admin | Publish |
+| POST | `/api/v1/projects/{project_id}/handovers/{handover_id}/archive` | admin | Archive |
+| GET | `/api/v1/projects/{project_id}/handovers/{handover_id}/export.md` | viewer | Export as Markdown |
+| GET | `/api/v1/projects/{project_id}/handovers/{handover_id}/export.pdf` | viewer | Export as PDF |
+| GET | `/api/v1/projects/{project_id}/audit` | viewer | Audit trail |
+| GET | `/api/v1/projects/{project_id}/readiness` | viewer | Current readiness summary |
+| POST | `/api/v1/projects/{project_id}/readiness/evaluate` | admin | Run a deterministic evaluation |
+| GET | `/api/v1/projects/{project_id}/readiness/history` | viewer | Score history |
+| GET | `/api/v1/projects/{project_id}/readiness/{evaluation_id}` | viewer | One evaluation snapshot |
+| GET | `/api/v1/projects/{project_id}/successor-tasks` | viewer | List successor tasks |
+| POST | `/api/v1/projects/{project_id}/successor-tasks/derive` | member | Derive tasks from approved claims |
+| POST | `/api/v1/projects/{project_id}/successor-tasks` | member | Create a manual task |
+| GET/PATCH | `/api/v1/projects/{project_id}/successor-tasks/{task_id}` | viewer / member | Task detail / update |
+| GET | `/api/v1/projects/{project_id}/knowledge-dependencies` | viewer | Knowledge dependency list |
+| POST | `/api/v1/projects/{project_id}/knowledge-dependencies/analyse` | member | Re-run the analysis |
+| GET | `/api/v1/projects/{project_id}/knowledge-dependencies/{dependency_id}` | viewer | Dependency detail |
+| POST | `/api/v1/projects/{project_id}/knowledge-dependencies/{dependency_id}/override` | admin | Reviewer override |
+| GET | `/api/v1/projects/{project_id}/knowledge-gaps` | viewer | Missing knowledge gaps |
+| POST | `/api/v1/projects/{project_id}/knowledge-gaps/detect` | member | Re-run gap detection |
+| GET/PATCH | `/api/v1/projects/{project_id}/knowledge-gaps/{gap_id}` | viewer / member | Gap detail / status update |
+| GET | `/api/v1/projects/{project_id}/scorecard` | viewer | Continuity scorecard |
+| GET | `/api/v1/projects/{project_id}/successor-workspace` | viewer | Successor workspace (A–J) |
+| POST/GET | `/api/v1/projects/{project_id}/successor-exercise` | admin / viewer | Run / read the successor exercise |
+| POST | `/api/v1/projects/{project_id}/evaluation/runs` | admin | Run the metrics evaluation |
+| GET | `/api/v1/projects/{project_id}/evaluation/runs[/{run_id}]` | viewer | Evaluation runs / one run |
+| GET | `/api/v1/projects/{project_id}/evaluation/compare` | viewer | Compare two runs |
+| GET | `/api/v1/projects/{project_id}/system-health` | viewer | Processing + source health |
+| POST | `/api/v1/workspaces/{workspace_id}/evaluation/synthetic-project` | admin | Seed the synthetic project |
 
-`auth` = any authenticated principal.
+`auth` = any authenticated principal. `viewer/member/admin` = minimum workspace role.
 
 ---
 
-## 10. Phase 3 (not implemented)
+## 10. Phase 3 — Project memory, claims & verification
 
-There are **no** claim-extraction, verification, or handover-generation endpoints. The typed contracts that Phase 3 will implement live in `app/schemas/claim.py` and `app/schemas/evidence.py` and are documented in [SCHEMAS.md](./SCHEMAS.md). The dashboard advertises them under `upcoming` only.
+Reconstruction runs the LangGraph workflow (`POST .../memory/reconstruct`) which extracts claims from ingested spans, verifies each against its cited evidence and detects contradictions. Claims are then listed and reviewed.
+
+- `GET .../memory` — reconstructed memory summary (counts, coverage).
+- `GET .../processing-runs` — every ingestion/AI run with status and error summary.
+- `GET .../review-queue` — claims pending a human decision.
+- `GET .../claims`, `GET .../claims/{claim_id}` — claim list and detail (text, type, entity, status, evidence refs, verification history).
+- `POST .../claims/{claim_id}/verify` — record a verification verdict.
+- `POST .../claims/{claim_id}/{review|approve|reject|request-clarification|edit}` — the human review actions. **Only these can set a claim to `Verified`**; the AI layer may only emit `Supported`, `Uncertain` or `Conflict`, enforced by `assert_ai_assignable_status()` in [claim_validation.py](../backend/app/services/claim_validation.py).
+- `GET .../conflicts`, `POST .../conflicts/{conflict_id}/resolve` — contradictions between claims and their resolution outcomes.
+- `GET .../questions`, `GET .../uncertainty` — open questions and everything marked uncertain.
+
+Response contracts are documented in [SCHEMAS.md](./SCHEMAS.md).
+
+---
+
+## 11. Phase 4 — Review, approval & handover
+
+Versioned handovers with an approval workflow and auditable exports.
+
+- `POST .../handovers/generate` — compose a handover from **approved** claims only.
+- `GET .../handovers`, `GET .../handovers/{handover_id}` — list/detail.
+- `GET .../handovers/{handover_id}/versions[/{version_number}]` — immutable versions.
+- `PATCH .../handovers/{handover_id}` — edit the draft version.
+- `POST .../handovers/{handover_id}/{submit|approve|publish|archive}` — lifecycle (`Draft → In Review → Approved → Published → Archived`).
+- `GET .../handovers/{handover_id}/export.md` and `.../export.pdf` — export a published version. Restricted source material is never included in a successor-facing export.
+- `GET .../audit` — the append-only audit trail (review decisions, status changes, exports, overrides).
+
+---
+
+## 12. Phase 5 — Readiness, successor experience & evaluation
+
+All Phase 5 endpoints are under `/api/v1/projects/{project_id}` unless noted. Scoring is deterministic; no endpoint returns an LLM-decided score.
+
+### Readiness
+- `GET .../readiness` — current summary: overall score, band, dimension scores, blockers, warnings, weights and requirement results.
+- `POST .../readiness/evaluate` — run and persist a new deterministic evaluation. Records the exact weights and **claim revisions** used.
+- `GET .../readiness/history`, `GET .../readiness/{evaluation_id}` — score history and one immutable snapshot.
+
+### Successor tasks (§5)
+- `GET/POST .../successor-tasks`, `POST .../successor-tasks/derive`, `GET/PATCH .../successor-tasks/{task_id}`.
+- Tasks are derived from **approved** claims only. No owner or deadline is invented; AI-suggested actions are labelled.
+
+### Knowledge risk (§6, §7)
+- `GET .../knowledge-dependencies`, `POST .../knowledge-dependencies/analyse`, `GET .../knowledge-dependencies/{dependency_id}`, `POST .../knowledge-dependencies/{dependency_id}/override` (admin; audit-trailed, and the computed value is preserved alongside the override).
+- `GET .../knowledge-gaps`, `POST .../knowledge-gaps/detect`, `GET/PATCH .../knowledge-gaps/{gap_id}` — missing knowledge stays visible; gaps are never filled with invented facts.
+
+### Workspace & scorecard (§4, §8)
+- `GET .../successor-workspace` — the guided onboarding workspace (sections A–J), each item linking back to its approved claim and evidence; restricted sources are excluded.
+- `GET .../scorecard` — the continuity scorecard; every metric is a live database aggregate.
+
+### Evaluation (§9, §10)
+- `POST .../evaluation/runs`, `GET .../evaluation/runs[/{run_id}]`, `GET .../evaluation/compare` — reproducible metric runs and run-to-run regression comparison.
+- `POST|GET .../successor-exercise` — the limited, evidence-based successor readiness exercise.
+- `POST /api/v1/workspaces/{workspace_id}/evaluation/synthetic-project` — seed the synthetic ground-truth project.
+- `GET .../system-health` — processing status, source health and recent failures.
+
+See [EVALUATION.md](./EVALUATION.md) for metric definitions and [ARCHITECTURE.md](./ARCHITECTURE.md) for the scoring formula.
+

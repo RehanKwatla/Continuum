@@ -15,6 +15,7 @@ vi.mock("@/contexts/AuthContext", () => ({
     user: null,
     provider: null,
     isDevSession: false,
+    isDemoSession: true,
     error: null,
     refresh: vi.fn(),
     signOut: vi.fn(),
@@ -56,63 +57,66 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByTestId("app-shell")).not.toBeInTheDocument();
   });
 
-  it("redirects an unauthenticated visitor to the login screen", () => {
-    authState.status = "unauthenticated";
-    renderGuarded();
+    it("opens the application shell directly for frictionless judge access without login redirects", () => {
+      authState.status = "unauthenticated";
+      renderGuarded();
 
-    expect(screen.getByText("login view")).toBeInTheDocument();
-    expect(screen.queryByText("dashboard view")).not.toBeInTheDocument();
+      expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+      expect(screen.getByText("dashboard view")).toBeInTheDocument();
+      expect(screen.queryByText("login view")).not.toBeInTheDocument();
+    });
+
+    it("renders the application shell for an authenticated user", () => {
+      authState.status = "authenticated";
+      renderGuarded();
+
+      expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+      expect(screen.getByText("dashboard view")).toBeInTheDocument();
+    });
   });
 
-  it("renders the application shell for an authenticated user", () => {
-    authState.status = "authenticated";
-    renderGuarded();
+  describe("PublicOnlyRoute", () => {
+    it("sends an authenticated user to the dashboard", () => {
+      authState.status = "authenticated";
+      render(
+        <MemoryRouter initialEntries={["/login"]}>
+          <Routes>
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <div>login view</div>
+                </PublicOnlyRoute>
+              }
+            />
+            <Route path="/dashboard" element={<div>dashboard view</div>} />
+          </Routes>
+        </MemoryRouter>,
+      );
 
-    expect(screen.getByTestId("app-shell")).toBeInTheDocument();
-    expect(screen.getByText("dashboard view")).toBeInTheDocument();
-  });
-});
+      expect(screen.getByText("dashboard view")).toBeInTheDocument();
+      expect(screen.queryByText("login view")).not.toBeInTheDocument();
+    });
 
-describe("PublicOnlyRoute", () => {
-  it("sends an authenticated user to the dashboard", () => {
-    authState.status = "authenticated";
-    render(
-      <MemoryRouter initialEntries={["/login"]}>
-        <Routes>
-          <Route
-            path="/login"
-            element={
-              <PublicOnlyRoute>
-                <div>login view</div>
-              </PublicOnlyRoute>
-            }
-          />
-          <Route path="/dashboard" element={<div>dashboard view</div>} />
-        </Routes>
-      </MemoryRouter>,
-    );
+      it("redirects unauthenticated visitors to the dashboard without showing a login screen", () => {
+        authState.status = "unauthenticated";
+        render(
+          <MemoryRouter initialEntries={["/login"]}>
+            <Routes>
+              <Route
+                path="/login"
+                element={
+                  <PublicOnlyRoute>
+                    <div>login view</div>
+                  </PublicOnlyRoute>
+                }
+              />
+              <Route path="/dashboard" element={<div>dashboard view</div>} />
+            </Routes>
+          </MemoryRouter>,
+        );
 
-    expect(screen.getByText("dashboard view")).toBeInTheDocument();
-    expect(screen.queryByText("login view")).not.toBeInTheDocument();
-  });
-
-  it("lets an unauthenticated user see the login screen", () => {
-    authState.status = "unauthenticated";
-    render(
-      <MemoryRouter initialEntries={["/login"]}>
-        <Routes>
-          <Route
-            path="/login"
-            element={
-              <PublicOnlyRoute>
-                <div>login view</div>
-              </PublicOnlyRoute>
-            }
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("login view")).toBeInTheDocument();
-  });
-});
+        expect(screen.getByText("dashboard view")).toBeInTheDocument();
+        expect(screen.queryByText("login view")).not.toBeInTheDocument();
+      });
+    });

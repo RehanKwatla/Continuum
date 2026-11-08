@@ -5,13 +5,18 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.core.errors import ForbiddenError, NotFoundError
+from app.core.errors import AuthError, ForbiddenError, NotFoundError
 from app.core.permissions import has_at_least, role_rank
-from app.core.security import AuthPrincipal, extract_bearer_token, principal_from_token
+from app.core.security import (
+    AuthPrincipal,
+    demo_principal,
+    extract_bearer_token,
+    principal_from_token,
+)
 from app.db.session import get_db
 from app.models.enums import WorkspaceRole
 from app.models.project import Project
@@ -24,11 +29,25 @@ from app.services.auth_service import AuthService
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
 
+#: Paths (suffix-matched) a token-less public-demo visitor may still write to.
+PUBLIC_DEMO_WRITE_ALLOWLIST: frozenset[str] = frozenset({"/public/demo/reset"})
+
 
 def get_current_principal(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> AuthPrincipal:
-    return principal_from_token(extract_bearer_token(authorization))
+    """Resolve the caller's identity.
+
+    With no ``Authorization`` header and public demo mode enabled, the fixed
+    read-only demo principal is returned. A present header is always verified
+    normally — the demo path never overrides a real credential.
+    """
+    if authorization:
+        return principal_from_token(extract_bearer_token(authorization))
+    settings = get_settings()
+    if settings.public_demo_mode:
+        return demo_principal()
+    raise AuthError("Authorization header is required.")
 
 
 CurrentPrincipal = Annotated[AuthPrincipal, Depends(get_current_principal)]
@@ -156,3 +175,33 @@ def highest_role(roles: list[WorkspaceRole]) -> WorkspaceRole | None:
     if not roles:
         return None
     return max(roles, key=role_rank)
+
+
+# ---------------------------------------------------------------------------
+# Public demo access policy
+# ---------------------------------------------------------------------------
+def public_demo_write_guard(request: Request) -> None:
+    """Keep the public demo read-only.
+
+    Token-less (demo) requests may only read, except for an explicit allowlist
+    of safe, isolated demonstration actions. Requests that carry a real
+    credential are unaffected. This is the explicit public-demo access policy
+    the router applies to every endpoint under the versioned API.
+    """
+    settings = get_settings()
+    if not settings.public_demo_mode or not settings.public_demo_read_only:
+        return
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    if request.headers.get("authorization"):
+        return
+    path = request.url.path
+    if any(path.endswith(allowed) for allowed in PUBLIC_DEMO_WRITE_ALLOWLIST):
+        return
+    raise ForbiddenError(
+        "The public demonstration environment is read-only. "
+        "Browsing, inspection and the demo reset action are available; "
+        "changing records is disabled.",
+        code="public_demo_read_only",
+        details={"public_demo": True, "read_only": True},
+    )

@@ -1,7 +1,8 @@
 /** Central TanStack Query key factory — keeps cache invalidation predictable. */
 
 export const queryKeys = {
-  readiness: ["readiness"] as const,
+  /** Service readiness probe (`/ready`), distinct from per-project handover readiness. */
+  serviceReadiness: ["readiness"] as const,
   health: ["health"] as const,
   session: ["session"] as const,
 
@@ -45,4 +46,35 @@ export const queryKeys = {
   githubBoundary: ["github", "boundary"] as const,
   githubRepositories: ["github", "repositories"] as const,
   githubRepository: (fullName: string) => ["github", "repository", fullName] as const,
+
+  // Phase 5 — readiness, successor experience, knowledge risk, evaluation.
+  readiness: (projectId: string) => ["projects", projectId, "readiness"] as const,
+  readinessHistory: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "readiness", "history", params ?? {}] as const,
+  readinessEvaluation: (projectId: string, evaluationId: string) =>
+    ["projects", projectId, "readiness", evaluationId] as const,
+  successorWorkspace: (projectId: string) =>
+    ["projects", projectId, "successor-workspace"] as const,
+  successorTasks: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "successor-tasks", params ?? {}] as const,
+  successorTask: (projectId: string, taskId: string) =>
+    ["projects", projectId, "successor-tasks", taskId] as const,
+  knowledgeDependencies: (projectId: string) =>
+    ["projects", projectId, "knowledge-dependencies"] as const,
+  knowledgeDependency: (projectId: string, dependencyId: string) =>
+    ["projects", projectId, "knowledge-dependencies", dependencyId] as const,
+  knowledgeGaps: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "knowledge-gaps", params ?? {}] as const,
+  knowledgeGap: (projectId: string, gapId: string) =>
+    ["projects", projectId, "knowledge-gaps", gapId] as const,
+  scorecard: (projectId: string) => ["projects", projectId, "scorecard"] as const,
+  successorExercise: (projectId: string) =>
+    ["projects", projectId, "successor-exercise"] as const,
+  evaluationRuns: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "evaluation", "runs", params ?? {}] as const,
+  evaluationRun: (projectId: string, runId: string) =>
+    ["projects", projectId, "evaluation", "runs", runId] as const,
+  evaluationComparison: (projectId: string, base: string, candidate: string) =>
+    ["projects", projectId, "evaluation", "compare", base, candidate] as const,
+  systemHealth: (projectId: string) => ["projects", projectId, "system-health"] as const,
 };

@@ -34,6 +34,9 @@ os.environ["DEV_AUTH_TOKEN"] = "test-dev-token"
 os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="continuum-test-uploads-")
 os.environ["MAX_UPLOAD_SIZE_BYTES"] = str(2 * 1024 * 1024)
 os.environ["MAX_ZIP_EXPANSION_BYTES"] = str(8 * 1024 * 1024)
+# Keep public demo mode off by default during core auth unit tests,
+# so that test suites expecting 401s on unauthenticated calls test the real gate.
+os.environ["PUBLIC_DEMO_MODE"] = "false"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

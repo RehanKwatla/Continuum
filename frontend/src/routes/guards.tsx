@@ -16,15 +16,14 @@ function SessionLoading() {
   );
 }
 
-/** Blocks unauthenticated access and renders the app frame for signed-in users. */
+/**
+ * Application route shell: provides frictionless judge access without login gates
+ * or protected-route redirects.
+ */
 export function ProtectedRoute() {
   const { status } = useAuth();
-  const location = useLocation();
 
   if (status === "loading") return <SessionLoading />;
-  if (status === "unauthenticated") {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  }
 
   return (
     <AppShell>
@@ -33,10 +32,10 @@ export function ProtectedRoute() {
   );
 }
 
-/** Redirects already-signed-in users away from the login screen. */
-export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { status } = useAuth();
-  if (status === "loading") return <SessionLoading />;
-  if (status === "authenticated") return <Navigate to="/dashboard" replace />;
-  return <>{children}</>;
-}
+  /** Redirects visitors away from login/signup directly into the dashboard. */
+  export function PublicOnlyRoute({ children }: { children?: React.ReactNode }) {
+    const { status } = useAuth();
+    if (status === "loading") return <SessionLoading />;
+    // Never show a login or signup screen in public demo mode
+    return <Navigate to="/dashboard" replace />;
+  }

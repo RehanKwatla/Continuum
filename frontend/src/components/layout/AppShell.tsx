@@ -6,7 +6,9 @@ import {
   LayoutDashboard,
   LogOut,
   Plug,
+  RotateCcw,
   Settings,
+  ShieldCheck,
   X,
 } from "lucide-react";
 
@@ -21,9 +23,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Topbar } from "@/components/layout/Topbar";
 import { Tooltip } from "@/components/common/Tooltip";
+import { useToast } from "@/components/ui/toast";
 import { WorkspaceCreateDialog } from "@/components/common/WorkspaceCreateDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspaces } from "@/hooks/use-workspaces";
+import { useResetPublicDemo } from "@/hooks/use-demo";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -134,16 +138,38 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function ProfileFooter() {
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
+  const { user, isDemoSession, signOut } = useAuth();
+  const resetDemo = useResetPublicDemo();
+  const { toast } = useToast();
   const [signingOut, setSigningOut] = React.useState(false);
-  const label = user?.full_name ?? user?.email ?? "Account";
+  const label = isDemoSession ? "Public Demo" : (user?.full_name ?? user?.email ?? "Account");
+
+  const handleResetDemo = async () => {
+    try {
+      await resetDemo.mutateAsync();
+      toast({
+        title: "Demo workspace reset",
+        description: "The synthetic demonstration workspace has been restored to pristine seed data.",
+        variant: "success",
+      });
+    } catch {
+      toast({
+        title: "Reset failed",
+        description: "Could not reset the demo workspace. Please try again shortly.",
+        variant: "error",
+      });
+    }
+  };
 
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
       await signOut();
-      navigate("/login", { replace: true });
+      toast({
+        title: "Session refreshed",
+        description: "Demo workspace reloaded in public judge mode.",
+        variant: "default",
+      });
     } finally {
       setSigningOut(false);
     }
@@ -156,20 +182,38 @@ function ProfileFooter() {
           {label.slice(0, 1)}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm text-foreground">{user?.full_name ?? "Continuum user"}</p>
-          <p className="truncate font-mono text-[10px] text-muted-foreground">{user?.email}</p>
+          <p className="truncate text-sm text-foreground">
+            {isDemoSession ? "Public Demo" : (user?.full_name ?? "Continuum user")}
+          </p>
+          <p className="truncate font-mono text-[10px] text-muted-foreground">
+            {isDemoSession ? "Judge access · Read-only" : user?.email}
+          </p>
         </div>
-        <Tooltip label="Sign out">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Sign out"
-            disabled={signingOut}
-            onClick={() => void handleSignOut()}
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </Tooltip>
+        {isDemoSession ? (
+          <Tooltip label="Reset demo data to pristine seed">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Reset demo workspace"
+              disabled={resetDemo.isPending}
+              onClick={() => void handleResetDemo()}
+            >
+              <RotateCcw className={cn("h-4 w-4", resetDemo.isPending && "animate-spin")} />
+            </Button>
+          </Tooltip>
+        ) : (
+          <Tooltip label="Sign out">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Sign out"
+              disabled={signingOut}
+              onClick={() => void handleSignOut()}
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+        )}
       </div>
     </div>
   );

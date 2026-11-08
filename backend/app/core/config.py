@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import Enum
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     # --- Development-only auth bypass ---------------------------------------
     allow_dev_auth: bool = False
     dev_auth_token: str = "dev-local-token"
+
+    # --- Public demo mode (frictionless judge access) -----------------------
+    # Enabled by default: a request with NO bearer token is served as the read-only
+    # *public demo* principal. That identity is a member of exactly one
+    # synthetic demo workspace and of nothing else, so the existing membership
+    # checks keep every real workspace invisible. A real bearer token is still
+    # verified normally.
+    public_demo_mode: bool = True
+    #: When true (default) the demo principal may only perform safe reads
+    #: (plus an explicit allowlist such as the demo reset action).
+    public_demo_read_only: bool = True
+    public_demo_workspace_name: str = "Continuum Demo Workspace"
+    public_demo_project_name: str = "Payment Gateway System"
+    #: Per-client-IP request budget for token-less (public) requests.
+    public_demo_rate_limit_per_minute: int = 180
 
     # --- GitHub OAuth --------------------------------------------------------
     github_client_id: str | None = None
@@ -113,6 +128,21 @@ class Settings(BaseSettings):
             and self.github_client_secret
             and self.github_token_encryption_key
         )
+
+    @model_validator(mode="after")
+    def _validate_environment(self) -> "Settings":
+        """Fail fast on an unsafe production configuration.
+
+        The development auth bypass is a genuine authentication bypass, so it
+        must never be enabled in production. Raising here means a misconfigured
+        deployment refuses to start rather than silently accepting forged
+        tokens.
+        """
+        if self.is_production and self.allow_dev_auth:
+            raise ValueError(
+                "ALLOW_DEV_AUTH must be false when ENVIRONMENT=production."
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

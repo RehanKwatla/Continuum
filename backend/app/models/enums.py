@@ -247,3 +247,109 @@ UPLOAD_SOURCE_TYPES: tuple[SourceType, ...] = (
     SourceType.UPLOADED_TEXT,
     SourceType.UPLOADED_ZIP_ENTRY,
 )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — readiness, successor experience, knowledge risk and evaluation
+# ---------------------------------------------------------------------------
+class ReadinessDimension(StrEnum):
+    """The six weighted dimensions of the Handover Readiness Engine (§2)."""
+
+    PROJECT_CONTEXT = "project_context"
+    IMPORTANT_DECISIONS = "important_decisions"
+    TECHNICAL_DEPENDENCIES = "technical_dependencies"
+    OWNERSHIP_CLARITY = "ownership_clarity"
+    UNFINISHED_WORK = "unfinished_work"
+    RISKS_OPERATIONS = "risks_and_operations"
+
+
+class RequirementCriticality(StrEnum):
+    """How much a single readiness requirement matters to the score."""
+
+    CRITICAL = "critical"
+    IMPORTANT = "important"
+    OPTIONAL = "optional"
+
+
+class RequirementCompletion(StrEnum):
+    """Deterministic completion assessment for one readiness requirement."""
+
+    COMPLETE = "Complete"
+    PARTIAL = "Partial"
+    MISSING = "Missing"
+    UNCERTAIN = "Uncertain"
+    BLOCKED = "Blocked"
+
+
+#: Completion values used by the deterministic scoring formula (§3).
+#: ``Blocked`` and ``Missing`` earn no credit; ``Uncertain`` earns partial credit
+#: so an evidence-backed-but-unreviewed requirement is never silently discarded.
+COMPLETION_VALUES: dict["RequirementCompletion", float] = {
+    RequirementCompletion.COMPLETE: 1.0,
+    RequirementCompletion.PARTIAL: 0.5,
+    RequirementCompletion.UNCERTAIN: 0.25,
+    RequirementCompletion.MISSING: 0.0,
+    RequirementCompletion.BLOCKED: 0.0,
+}
+
+#: Requirement weights used when combining requirements inside a dimension.
+CRITICALITY_WEIGHTS: dict["RequirementCriticality", float] = {
+    RequirementCriticality.CRITICAL: 3.0,
+    RequirementCriticality.IMPORTANT: 2.0,
+    RequirementCriticality.OPTIONAL: 1.0,
+}
+
+
+class ReadinessBand(StrEnum):
+    """Product presentation band for the overall readiness score (§3)."""
+
+    STRONG = "strong"
+    MOSTLY_READY = "mostly_ready"
+    NEEDS_REVIEW = "needs_review"
+    NOT_READY = "not_ready"
+
+
+class SuccessorTaskPriority(StrEnum):
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
+
+
+class SuccessorTaskStatus(StrEnum):
+    NOT_STARTED = "Not Started"
+    IN_PROGRESS = "In Progress"
+    BLOCKED = "Blocked"
+    COMPLETED = "Completed"
+
+
+class DependencyRiskStatus(StrEnum):
+    """Risk that critical knowledge rests with a single person (§6)."""
+
+    LOW = "Low"
+    MODERATE = "Moderate"
+    HIGH = "High"
+    UNKNOWN = "Unknown"
+
+
+class KnowledgeGapStatus(StrEnum):
+    """Lifecycle of a detected missing-knowledge gap (§7)."""
+
+    OPEN = "Open"
+    IN_PROGRESS = "In Progress"
+    RESOLVED = "Resolved"
+    ACCEPTED_RISK = "Accepted Risk"
+
+
+class EvaluationKind(StrEnum):
+    """What an :class:`EvaluationRun` row records."""
+
+    METRICS = "metrics"
+    SUCCESSOR_EXERCISE = "successor_exercise"
+
+
+class ExerciseOutcome(StrEnum):
+    """Result of one successor readiness-exercise question (§10)."""
+
+    COMPLETED = "completed"
+    BLOCKED = "blocked"
+    MISSING_INFORMATION = "missing_information"

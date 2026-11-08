@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   Copy,
   ExternalLink,
@@ -11,6 +12,7 @@ import {
   Loader2,
   Lock,
   Search,
+  ShieldCheck,
   Star,
 } from "lucide-react";
 
@@ -28,6 +30,7 @@ import { EmptyState, ErrorState } from "@/components/common/States";
 import { ProcessingStatusBadge } from "@/components/common/StatusBadge";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   useGitHubBoundary,
   useGitHubRepositories,
@@ -97,6 +100,7 @@ function OptionToggle({
 
 export default function GitHubRepositories() {
   const { projectId } = useParams<{ projectId: string }>();
+  const { isDemoSession } = useAuth();
   const project = useProject(projectId);
   const status = useGitHubStatus();
   const boundary = useGitHubBoundary();
@@ -216,339 +220,367 @@ export default function GitHubRepositories() {
         </Card>
       ) : null}
 
-      {status.isSuccess && configured && !connected ? (
-        <Card>
+        {
+          isDemoSession?(
+        <Card className = "border-primary/40 bg-primary/10" >
           <CardHeader>
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Authorise GitHub
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm">Public Demo Environment: Pre-loaded Synthetic Activity</CardTitle>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Continuum requests read-only access. The OAuth token is exchanged and encrypted
-              server-side; it is never sent to this page or stored in the browser.
+            <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+              External GitHub account connection is disabled in public demo mode to maintain isolation and security.
+              This demo workspace has already ingested realistic synthetic GitHub activity (pull requests, issues,
+              commits, and repository README) into the Payment Gateway System.
             </p>
-            <Button size="sm" onClick={() => void handleConnect()} disabled={startConnect.isPending}>
-              <Github className="h-4 w-4" />
-              {startConnect.isPending ? "Redirecting…" : "Connect GitHub"}
+            <Button size="sm" asChild variant="outline">
+              <Link to={`/projects/${projectId}/sources`}>
+                Browse Ingested GitHub Sources
+                <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Link>
             </Button>
           </CardContent>
         </Card>
-      ) : null}
+  ) : status.isSuccess && configured && !connected ? (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xs font-medium text-muted-foreground">
+          Authorise GitHub
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Continuum requests read-only access. The OAuth token is exchanged and encrypted
+          server-side; it is never sent to this page or stored in the browser.
+        </p>
+        <Button size="sm" onClick={() => void handleConnect()} disabled={startConnect.isPending}>
+          <Github className="h-4 w-4" />
+          {startConnect.isPending ? "Redirecting…" : "Connect GitHub"}
+        </Button>
+      </CardContent>
+    </Card>
+  ) : null
+}
 
-      {connected ? (
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-          <Card className="overflow-hidden">
-            <CardHeader className="space-y-3">
-              <CardTitle className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-                <span className="flex items-center gap-2">
-                  <Github className="h-3.5 w-3.5" />
-                  Authorised repositories
-                </span>
-                {repositories.data ? (
-                  <span className="tabular-nums">{repositories.data.total}</span>
-                ) : null}
-              </CardTitle>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  placeholder="Filter repositories"
-                  className="pl-8"
-                  aria-label="Filter repositories"
-                />
-              </div>
-            </CardHeader>
-            <CardContent className="max-h-[520px] overflow-y-auto p-0">
-              {repositories.isLoading ? (
-                <div className="space-y-2 p-4">
-                  {Array.from({ length: 6 }).map((_, index) => (
-                    <Skeleton key={index} className="h-14 w-full rounded-md" />
-                  ))}
-                </div>
-              ) : null}
-
-              {repositories.isError ? (
-                <div className="p-4">
-                  <ErrorState error={repositories.error} onRetry={() => void repositories.refetch()} />
-                </div>
-              ) : null}
-
-              {repositories.isSuccess && visibleRepositories.length === 0 ? (
-                <div className="p-4">
-                  <EmptyState
-                    icon={<GitFork className="h-4 w-4" />}
-                    title={filter ? "No repositories match" : "No repositories available"}
-                    description={
-                      filter
-                        ? "Adjust the filter."
-                        : "The connected account has no repositories this token can read."
-                    }
-                  />
-                </div>
-              ) : null}
-
-              {repositories.isSuccess && visibleRepositories.length > 0 ? (
-                <ul className="divide-y divide-border/70">
-                  {visibleRepositories.map((repository) => {
-                    const isSelected = selected?.full_name === repository.full_name;
-                    return (
-                      <li key={repository.id}>
-                        <button
-                          type="button"
-                          onClick={() => setSelected(repository)}
-                          className={
-                            isSelected
-                              ? "w-full bg-primary/[0.07] px-4 py-3 text-left transition-colors"
-                              : "w-full px-4 py-3 text-left transition-colors hover:bg-accent/40"
-                          }
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">
-                              {repository.full_name}
-                            </span>
-                            {repository.private ? (
-                              <Badge variant="outline" className="gap-1">
-                                <Lock className="h-2.5 w-2.5" />
-                                Private
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
-                            {repository.description || "No description"}
-                          </p>
-                          <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                            {repository.language ? <span>{repository.language}</span> : null}
-                            <span className="flex items-center gap-1">
-                              <Star className="h-3 w-3" />
-                              {repository.stars}
-                            </span>
-                            {repository.updated_at ? (
-                              <span>updated {formatRelative(repository.updated_at)}</span>
-                            ) : null}
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xs font-medium text-muted-foreground">
-                Import configuration
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!selected ? (
-                <EmptyState
-                  icon={<GitFork className="h-4 w-4" />}
-                  title="Select a repository"
-                  description="Choose a repository from the list to configure what gets imported."
-                />
-              ) : (
-                <>
-                  <div className="rounded-lg border border-border/70 bg-card/40 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{selected.full_name}</p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {selected.private ? "Private" : "Public"}
-                          {selected.default_branch ? ` · ${selected.default_branch}` : ""}
-                        </p>
-                      </div>
-                      {selected.html_url ? (
-                        <Tooltip label="Open on GitHub">
-                          <Button variant="ghost" size="icon" asChild>
-                            <a
-                              href={selected.html_url}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                              aria-label="Open on GitHub"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          </Button>
-                        </Tooltip>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <OptionToggle
-                      id="opt-commits"
-                      label="Commits"
-                      description="SHA, author, message, timestamp and repository information."
-                      checked={options.include_commits}
-                      onChange={(value) => setOptions((current) => ({ ...current, include_commits: value }))}
-                    />
-                    <OptionToggle
-                      id="opt-issues"
-                      label="Issues"
-                      description="Number, title, body, author, labels, state and timestamps."
-                      checked={options.include_issues}
-                      onChange={(value) => setOptions((current) => ({ ...current, include_issues: value }))}
-                    />
-                    <OptionToggle
-                      id="opt-prs"
-                      label="Pull requests"
-                      description="Number, title, description, author, state, merged status and timestamps."
-                      checked={options.include_pull_requests}
-                      onChange={(value) =>
-                        setOptions((current) => ({ ...current, include_pull_requests: value }))
-                      }
-                    />
-                    <OptionToggle
-                      id="opt-readme"
-                      label="README"
-                      description="The repository README, when present."
-                      checked={options.include_readme}
-                      onChange={(value) => setOptions((current) => ({ ...current, include_readme: value }))}
-                    />
-                    <OptionToggle
-                      id="opt-files"
-                      label="Permitted text files"
-                      description="Documentation files from the repository root and docs folder."
-                      checked={options.include_files}
-                      onChange={(value) => setOptions((current) => ({ ...current, include_files: value }))}
-                    />
-                    <OptionToggle
-                      id="opt-changed"
-                      label="Changed-file lists"
-                      description="Fetch changed files per commit and pull request. Costs one extra API request each."
-                      checked={options.include_changed_files}
-                      onChange={(value) =>
-                        setOptions((current) => ({ ...current, include_changed_files: value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="max-items">Maximum items per category</Label>
-                    <Input
-                      id="max-items"
-                      type="number"
-                      min={1}
-                      max={200}
-                      value={options.max_items}
-                      onChange={(event) =>
-                        setOptions((current) => ({
-                          ...current,
-                          max_items: Math.min(200, Math.max(1, Number(event.target.value) || 1)),
-                        }))
-                      }
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Pagination and rate limits are handled server-side. Lower this value to stay
-                      well within your GitHub API quota.
-                    </p>
-                  </div>
-
-                  <Button
-                    className="w-full"
-                    onClick={() => void handleImport()}
-                    disabled={importRepo.isPending}
-                  >
-                    {importRepo.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Importing…
-                      </>
-                    ) : (
-                      <>
-                        <Github className="h-4 w-4" />
-                        Import into this project
-                      </>
-                    )}
-                  </Button>
-
-                  {importRepo.isError ? (
-                    <ErrorState error={importRepo.error} title="Import could not be completed" />
-                  ) : null}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
-
-      {outcome ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xs font-medium text-muted-foreground">Import outcome</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[
-                { label: "Imported", value: outcome.imported, tone: "text-status-ok" },
-                { label: "Duplicates", value: outcome.duplicates, tone: "text-muted-foreground" },
-                { label: "Skipped", value: outcome.skipped, tone: "text-status-warn" },
-                { label: "Failed", value: outcome.failed, tone: "text-status-danger" },
-              ].map((item) => (
-                <div key={item.label} className="rounded-md border border-border/70 bg-card/40 p-2.5">
-                  <p className="label-eyebrow">{item.label}</p>
-                  <p className={`mt-1 text-lg font-semibold tabular-nums ${item.tone}`}>
-                    {item.value}
-                  </p>
-                </div>
+{
+  connected ? (
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <Card className="overflow-hidden">
+        <CardHeader className="space-y-3">
+          <CardTitle className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <Github className="h-3.5 w-3.5" />
+              Authorised repositories
+            </span>
+            {repositories.data ? (
+              <span className="tabular-nums">{repositories.data.total}</span>
+            ) : null}
+          </CardTitle>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Filter repositories"
+              className="pl-8"
+              aria-label="Filter repositories"
+            />
+          </div>
+        </CardHeader>
+        <CardContent className="max-h-[520px] overflow-y-auto p-0">
+          {repositories.isLoading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <Skeleton key={index} className="h-14 w-full rounded-md" />
               ))}
             </div>
+          ) : null}
 
-            <Separator />
+          {repositories.isError ? (
+            <div className="p-4">
+              <ErrorState error={repositories.error} onRetry={() => void repositories.refetch()} />
+            </div>
+          ) : null}
 
-            {outcome.results.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No individual records were returned. The repository may be empty or all selected
-                categories were disabled.
-              </p>
-            ) : (
-              <ul className="max-h-[420px] divide-y divide-border/70 overflow-y-auto">
-                {outcome.results.map((result, index) => {
-                  const Icon =
-                    result.status === "completed"
-                      ? CheckCircle2
-                      : result.status === "duplicate"
-                        ? Copy
-                        : AlertTriangle;
-                  return (
-                    <li
-                      key={`${result.filename}-${result.source_id ?? index}`}
-                      className="flex items-start gap-3 py-2.5"
+          {repositories.isSuccess && visibleRepositories.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                icon={<GitFork className="h-4 w-4" />}
+                title={filter ? "No repositories match" : "No repositories available"}
+                description={
+                  filter
+                    ? "Adjust the filter."
+                    : "The connected account has no repositories this token can read."
+                }
+              />
+            </div>
+          ) : null}
+
+          {repositories.isSuccess && visibleRepositories.length > 0 ? (
+            <ul className="divide-y divide-border/70">
+              {visibleRepositories.map((repository) => {
+                const isSelected = selected?.full_name === repository.full_name;
+                return (
+                  <li key={repository.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(repository)}
+                      className={
+                        isSelected
+                          ? "w-full bg-primary/[0.07] px-4 py-3 text-left transition-colors"
+                          : "w-full px-4 py-3 text-left transition-colors hover:bg-accent/40"
+                      }
                     >
-                      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate text-xs">{result.filename}</span>
-                          <ProcessingStatusBadge status={result.status} />
-                        </div>
-                        {result.message ? (
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">{result.message}</p>
-                        ) : null}
-                        {result.source_id ? (
-                          <Link
-                            to={`/sources/${result.source_id}`}
-                            className="mt-1 inline-block text-[11px] text-primary hover:underline"
-                          >
-                            View source
-                          </Link>
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium">
+                          {repository.full_name}
+                        </span>
+                        {repository.private ? (
+                          <Badge variant="outline" className="gap-1">
+                            <Lock className="h-2.5 w-2.5" />
+                            Private
+                          </Badge>
                         ) : null}
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                      <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+                        {repository.description || "No description"}
+                      </p>
+                      <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                        {repository.language ? <span>{repository.language}</span> : null}
+                        <span className="flex items-center gap-1">
+                          <Star className="h-3 w-3" />
+                          {repository.stars}
+                        </span>
+                        {repository.updated_at ? (
+                          <span>updated {formatRelative(repository.updated_at)}</span>
+                        ) : null}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </CardContent>
+      </Card>
 
-            <Button variant="outline" size="sm" asChild>
-              <Link to={`/projects/${projectId}/sources`}>Open source library</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xs font-medium text-muted-foreground">
+            Import configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!selected ? (
+            <EmptyState
+              icon={<GitFork className="h-4 w-4" />}
+              title="Select a repository"
+              description="Choose a repository from the list to configure what gets imported."
+            />
+          ) : (
+            <>
+              <div className="rounded-lg border border-border/70 bg-card/40 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{selected.full_name}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {selected.private ? "Private" : "Public"}
+                      {selected.default_branch ? ` · ${selected.default_branch}` : ""}
+                    </p>
+                  </div>
+                  {selected.html_url ? (
+                    <Tooltip label="Open on GitHub">
+                      <Button variant="ghost" size="icon" asChild>
+                        <a
+                          href={selected.html_url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          aria-label="Open on GitHub"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    </Tooltip>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <OptionToggle
+                  id="opt-commits"
+                  label="Commits"
+                  description="SHA, author, message, timestamp and repository information."
+                  checked={options.include_commits}
+                  onChange={(value) => setOptions((current) => ({ ...current, include_commits: value }))}
+                />
+                <OptionToggle
+                  id="opt-issues"
+                  label="Issues"
+                  description="Number, title, body, author, labels, state and timestamps."
+                  checked={options.include_issues}
+                  onChange={(value) => setOptions((current) => ({ ...current, include_issues: value }))}
+                />
+                <OptionToggle
+                  id="opt-prs"
+                  label="Pull requests"
+                  description="Number, title, description, author, state, merged status and timestamps."
+                  checked={options.include_pull_requests}
+                  onChange={(value) =>
+                    setOptions((current) => ({ ...current, include_pull_requests: value }))
+                  }
+                />
+                <OptionToggle
+                  id="opt-readme"
+                  label="README"
+                  description="The repository README, when present."
+                  checked={options.include_readme}
+                  onChange={(value) => setOptions((current) => ({ ...current, include_readme: value }))}
+                />
+                <OptionToggle
+                  id="opt-files"
+                  label="Permitted text files"
+                  description="Documentation files from the repository root and docs folder."
+                  checked={options.include_files}
+                  onChange={(value) => setOptions((current) => ({ ...current, include_files: value }))}
+                />
+                <OptionToggle
+                  id="opt-changed"
+                  label="Changed-file lists"
+                  description="Fetch changed files per commit and pull request. Costs one extra API request each."
+                  checked={options.include_changed_files}
+                  onChange={(value) =>
+                    setOptions((current) => ({ ...current, include_changed_files: value }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="max-items">Maximum items per category</Label>
+                <Input
+                  id="max-items"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={options.max_items}
+                  onChange={(event) =>
+                    setOptions((current) => ({
+                      ...current,
+                      max_items: Math.min(200, Math.max(1, Number(event.target.value) || 1)),
+                    }))
+                  }
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Pagination and rate limits are handled server-side. Lower this value to stay
+                  well within your GitHub API quota.
+                </p>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={() => void handleImport()}
+                disabled={importRepo.isPending}
+              >
+                {importRepo.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Importing…
+                  </>
+                ) : (
+                  <>
+                    <Github className="h-4 w-4" />
+                    Import into this project
+                  </>
+                )}
+              </Button>
+
+              {importRepo.isError ? (
+                <ErrorState error={importRepo.error} title="Import could not be completed" />
+              ) : null}
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
+  ) : null
+}
+
+{
+  outcome ? (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xs font-medium text-muted-foreground">Import outcome</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: "Imported", value: outcome.imported, tone: "text-status-ok" },
+            { label: "Duplicates", value: outcome.duplicates, tone: "text-muted-foreground" },
+            { label: "Skipped", value: outcome.skipped, tone: "text-status-warn" },
+            { label: "Failed", value: outcome.failed, tone: "text-status-danger" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-md border border-border/70 bg-card/40 p-2.5">
+              <p className="label-eyebrow">{item.label}</p>
+              <p className={`mt-1 text-lg font-semibold tabular-nums ${item.tone}`}>
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <Separator />
+
+        {outcome.results.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No individual records were returned. The repository may be empty or all selected
+            categories were disabled.
+          </p>
+        ) : (
+          <ul className="max-h-[420px] divide-y divide-border/70 overflow-y-auto">
+            {outcome.results.map((result, index) => {
+              const Icon =
+                result.status === "completed"
+                  ? CheckCircle2
+                  : result.status === "duplicate"
+                    ? Copy
+                    : AlertTriangle;
+              return (
+                <li
+                  key={`${result.filename}-${result.source_id ?? index}`}
+                  className="flex items-start gap-3 py-2.5"
+                >
+                  <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-xs">{result.filename}</span>
+                      <ProcessingStatusBadge status={result.status} />
+                    </div>
+                    {result.message ? (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{result.message}</p>
+                    ) : null}
+                    {result.source_id ? (
+                      <Link
+                        to={`/sources/${result.source_id}`}
+                        className="mt-1 inline-block text-[11px] text-primary hover:underline"
+                      >
+                        View source
+                      </Link>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <Button variant="outline" size="sm" asChild>
+          <Link to={`/projects/${projectId}/sources`}>Open source library</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  ) : null
+}
+    </div >
   );
 }

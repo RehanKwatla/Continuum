@@ -23,6 +23,7 @@ import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { ProcessingStatusBadge } from "@/components/common/StatusBadge";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { useProject } from "@/hooks/use-projects";
 import { useUploadSources } from "@/hooks/use-sources";
 import { formatBytes } from "@/lib/format";
@@ -42,6 +43,7 @@ export default function UploadSources() {
   const project = useProject(projectId);
   const upload = useUploadSources(projectId ?? "");
   const { toast } = useToast();
+  const { isDemoSession } = useAuth();
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [files, setFiles] = React.useState<File[]>([]);
@@ -147,6 +149,25 @@ export default function UploadSources() {
       />
 
       {projectId ? <ProjectWorkspaceNav projectId={projectId} /> : null}
+
+      {isDemoSession ? (
+        <Alert variant="default" className="border-primary/40 bg-primary/10">
+          <AlertTriangle className="h-4 w-4 text-primary" />
+          <div>
+            <p className="text-xs font-semibold text-foreground">
+              Public Demo Environment: Read-Only Ingestion
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              New uploads are disabled in public demo mode to ensure workspace isolation and security.
+              Inspect the pre-loaded synthetic documents in the{" "}
+              <Link to={`/projects/${projectId}/sources`} className="text-primary underline">
+                Source Library
+              </Link>
+              .
+            </p>
+          </div>
+        </Alert>
+      ) : null}
 
       {project.isError ? (
         <Alert variant="destructive" title="Project unavailable">

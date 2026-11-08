@@ -8,11 +8,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AuthError
-from app.core.security import DEV_PROVIDER, AuthPrincipal
+from app.core.security import DEMO_PROVIDER, DEV_PROVIDER, AuthPrincipal
 from app.models.user import User
 from app.repositories.users import UsersRepository
 
 logger = logging.getLogger("continuum.auth")
+
+#: Providers that are not backed by a Supabase subject id.
+_LOCAL_PROVIDERS = (DEV_PROVIDER, DEMO_PROVIDER)
 
 
 class AuthService:
@@ -24,13 +27,13 @@ class AuthService:
         """Find or create the local User for a verified principal.
 
         The frontend never supplies this identity — it always derives from a
-        verified token.
+        verified token (or, in public demo mode only, the fixed demo principal).
         """
         if principal.provider == DEV_PROVIDER and not principal.email:
             raise AuthError("Development session is missing an email claim.")
 
         user: User | None = None
-        if principal.provider != DEV_PROVIDER:
+        if principal.provider not in _LOCAL_PROVIDERS:
             user = self.users.get_by_supabase_id(principal.subject)
 
         if user is None and principal.email:
@@ -39,7 +42,7 @@ class AuthService:
 
         if user is not None:
             changed = False
-            if principal.provider != DEV_PROVIDER and not user.supabase_user_id:
+            if principal.provider not in _LOCAL_PROVIDERS and not user.supabase_user_id:
                 user.supabase_user_id = principal.subject
                 changed = True
             if principal.full_name and not user.full_name:
@@ -63,7 +66,7 @@ class AuthService:
         user = self.users.create(
             email=email,
             full_name=principal.full_name,
-            supabase_user_id=None if principal.provider == DEV_PROVIDER else principal.subject,
+            supabase_user_id=None if principal.provider in _LOCAL_PROVIDERS else principal.subject,
         )
         try:
             self.db.commit()

@@ -20,7 +20,7 @@ export function useHealth() {
 
 export function useReadiness() {
   return useQuery({
-    queryKey: queryKeys.readiness,
+    queryKey: queryKeys.serviceReadiness,
     queryFn: fetchReadiness,
     retry: 1,
     staleTime: 30_000,

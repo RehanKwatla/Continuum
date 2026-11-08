@@ -17,6 +17,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { PageHeader } from "@/components/common/PageHeader";
 import { WorkspaceCreateDialog } from "@/components/common/WorkspaceCreateDialog";
 import { useCreateProject } from "@/hooks/use-projects";
@@ -33,6 +34,7 @@ export default function ProjectCreate() {
   const workspaces = useWorkspaces();
   const createProject = useCreateProject();
   const { toast } = useToast();
+  const { isDemoSession } = useAuth();
 
   const [workspaceId, setWorkspaceId] = React.useState("");
   const [name, setName] = React.useState("");
@@ -95,6 +97,24 @@ export default function ProjectCreate() {
           </Button>
         }
       />
+
+      {isDemoSession ? (
+        <Alert variant="default" className="border-primary/40 bg-primary/10">
+          <div>
+            <p className="text-xs font-semibold text-foreground">
+              Public Demo Environment: Read-Only Project Management
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Creating new projects is disabled in public demo mode to maintain workspace isolation.
+              You can explore the pre-seeded{" "}
+              <Link to="/projects" className="text-primary underline">
+                Payment Gateway System
+              </Link>{" "}
+              project and all its reconstructed memory.
+            </p>
+          </div>
+        </Alert>
+      ) : null}
 
       {workspaces.isLoading ? (
         <Skeleton className="h-[420px] rounded-lg" />
@@ -207,13 +227,17 @@ export default function ProjectCreate() {
               </div>
 
               <div className="flex items-center gap-2 border-t border-border/70 pt-4">
-                <Button type="submit" disabled={createProject.isPending || !name.trim()}>
-                  <FolderPlus className="h-4 w-4" />
-                  {createProject.isPending ? "Creating…" : "Create project"}
-                </Button>
-                <Button type="button" variant="ghost" asChild>
-                  <Link to="/projects">Cancel</Link>
-                </Button>
+                  <Button type="submit" disabled={createProject.isPending || !name.trim() || isDemoSession}>
+                    <FolderPlus className="h-4 w-4" />
+                    {isDemoSession
+                      ? "Creation disabled in demo mode"
+                      : createProject.isPending
+                        ? "Creating…"
+                        : "Create project"}
+                  </Button>
+                  <Button type="button" variant="ghost" asChild>
+                    <Link to="/projects">Cancel</Link>
+                  </Button>
               </div>
             </form>
           </CardContent>

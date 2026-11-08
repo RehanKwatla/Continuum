@@ -22,6 +22,14 @@ logger = logging.getLogger("continuum.security")
 
 DEV_PROVIDER = "dev"
 SUPABASE_PROVIDER = "supabase"
+DEMO_PROVIDER = "demo"
+
+#: Fixed identity used for token-less requests when public demo mode is on.
+#: It carries no real personal information and belongs only to the synthetic
+#: demo workspace. The reserved ``example.com`` domain keeps it unmistakably
+#: non-routable.
+DEMO_SUBJECT = "public-demo-user"
+DEMO_EMAIL = "public-demo@example.com"
 
 
 @dataclass(frozen=True)
@@ -116,3 +124,19 @@ def extract_bearer_token(authorization: str | None) -> str:
     if scheme.lower() != "bearer" or not token.strip():
         raise AuthError("Authorization header must use the Bearer scheme.")
     return token.strip()
+
+
+def demo_principal() -> AuthPrincipal:
+    """The read-only identity served to token-less requests in public demo mode.
+
+    This is NOT an authentication bypass for real data: the identity is a
+    member of the single synthetic demo workspace and of nothing else, so every
+    membership check still hides other tenants' resources.
+    """
+    return AuthPrincipal(
+        subject=DEMO_SUBJECT,
+        provider=DEMO_PROVIDER,
+        email=DEMO_EMAIL,
+        full_name="Public Demo",
+        claims={"public_demo": True},
+    )

@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.core.dependencies import CurrentPrincipal, CurrentUser
-from app.core.security import DEV_PROVIDER
+from app.core.security import DEMO_PROVIDER, DEV_PROVIDER
 from app.schemas.auth import AuthSessionResponse, UserProfile
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -21,6 +21,7 @@ def _session(principal, user) -> AuthSessionResponse:
         user=UserProfile.model_validate(user),
         auth_provider=principal.provider,
         is_dev_session=principal.provider == DEV_PROVIDER,
+        is_demo_session=principal.provider == DEMO_PROVIDER,
     )
 
 

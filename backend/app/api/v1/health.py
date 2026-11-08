@@ -47,4 +47,6 @@ def readiness(
         "supabase_auth_configured": settings.supabase_auth_configured,
         "github_oauth_configured": settings.github_oauth_configured,
         "dev_auth_enabled": settings.allow_dev_auth and not settings.is_production,
+        "public_demo_mode": settings.public_demo_mode,
+        "public_demo_read_only": settings.public_demo_read_only,
     }

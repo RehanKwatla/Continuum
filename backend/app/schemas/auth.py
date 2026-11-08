@@ -23,3 +23,4 @@ class AuthSessionResponse(BaseModel):
     user: UserProfile
     auth_provider: str
     is_dev_session: bool = False
+    is_demo_session: bool = False

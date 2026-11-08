@@ -122,6 +122,21 @@ export interface AuthSessionResponse {
   user: UserProfile;
   auth_provider: string;
   is_dev_session: boolean;
+  is_demo_session?: boolean;
+}
+
+export interface PublicDemoStatus {
+  enabled: boolean;
+  read_only: boolean;
+  seeded: boolean;
+  banner_label: string;
+  disclaimer: string;
+  workspace_id?: string;
+  workspace_name?: string;
+  project_id?: string;
+  project_name?: string;
+  counts: Record<string, number>;
+  links: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -879,4 +894,453 @@ export interface AuditLogRead {
 export interface AuditTrailResponse {
   items: AuditLogRead[];
   meta: PageMeta;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §2–§3 Handover readiness (mirrors app/schemas/phase5.py)
+// ---------------------------------------------------------------------------
+export type ReadinessDimension =
+  | "project_context"
+  | "important_decisions"
+  | "technical_dependencies"
+  | "ownership_clarity"
+  | "unfinished_work"
+  | "risks_and_operations";
+
+export type RequirementCriticality = "critical" | "important" | "optional";
+
+export type RequirementCompletion =
+  | "Complete"
+  | "Partial"
+  | "Missing"
+  | "Uncertain"
+  | "Blocked";
+
+export type ReadinessBand = "strong" | "mostly_ready" | "needs_review" | "not_ready";
+
+/** One evaluated readiness requirement and the evidence behind its status. */
+export interface RequirementResult {
+  requirement_id: string;
+  dimension: string;
+  description: string;
+  criticality: string;
+  completion: RequirementCompletion;
+  supporting_claim_ids: string[];
+  supporting_source_ids: string[];
+  missing_information: string;
+  evaluation_reason: string;
+  suggested_resolution: string;
+  gap_category: string;
+}
+
+export interface DimensionScore {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+  requirement_count: number;
+  complete_count: number;
+  criticality_weight: number;
+}
+
+export interface ReadinessIssue {
+  code: string;
+  message: string;
+  requirement_id?: string | null;
+  dimension?: string | null;
+  criticality?: string | null;
+  conflict_id?: string | null;
+  property_key?: string | null;
+}
+
+/**
+ * An immutable, deterministic readiness snapshot. The score is always returned
+ * together with its blockers, warnings and the exact claim revisions used.
+ */
+export interface ReadinessEvaluation {
+  id: string;
+  project_id: string;
+  handover_id: string | null;
+  overall_score: number;
+  band: ReadinessBand;
+  weights: Record<string, number>;
+  dimension_scores: Record<string, DimensionScore>;
+  requirements: RequirementResult[];
+  blockers: ReadinessIssue[];
+  warnings: ReadinessIssue[];
+  claim_revisions: Record<string, number>;
+  formula: string | null;
+  config: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ReadinessBandSpec {
+  threshold: number;
+  band: ReadinessBand;
+  label: string;
+}
+
+/** The readiness dashboard payload, including its not-yet-evaluated state. */
+export interface ReadinessOverview {
+  project_id: string;
+  evaluation: ReadinessEvaluation | null;
+  bands: ReadinessBandSpec[];
+  default_weights: Record<string, number>;
+  dimension_labels: Record<string, string>;
+  formula: string;
+  disclaimer: string;
+}
+
+export interface ReadinessHistoryResponse {
+  items: ReadinessEvaluation[];
+  total: number;
+}
+
+export interface ReadinessEvaluateInput {
+  weights?: Record<string, number> | null;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §5 Successor task checklist
+// ---------------------------------------------------------------------------
+export type SuccessorTaskPriority = "High" | "Medium" | "Low";
+export type SuccessorTaskStatus = "Not Started" | "In Progress" | "Blocked" | "Completed";
+/** "derived" = established obligation, "suggested" = AI/system recommendation, "manual" = successor-authored. */
+export type SuccessorTaskOrigin = "derived" | "suggested" | "manual";
+
+export interface SuccessorTask {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  priority: SuccessorTaskPriority;
+  status: SuccessorTaskStatus;
+  owner: string | null;
+  completion_criteria: string | null;
+  supporting_claim_ids: string[];
+  dependency_ids: string[];
+  origin: SuccessorTaskOrigin;
+  origin_claim_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SuccessorTaskListResponse {
+  items: SuccessorTask[];
+  total: number;
+}
+
+export interface SuccessorTaskCreateInput {
+  title: string;
+  description?: string | null;
+  priority?: SuccessorTaskPriority;
+  completion_criteria?: string | null;
+}
+
+export interface SuccessorTaskStatusUpdateInput {
+  status: SuccessorTaskStatus;
+  note?: string | null;
+}
+
+export interface SuccessorDeriveResponse {
+  created: number;
+  total: number;
+  task_ids: string[];
+  gaps_considered: number;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §6 Knowledge dependency analysis
+// ---------------------------------------------------------------------------
+export type DependencyRiskStatus = "Low" | "Moderate" | "High" | "Unknown";
+
+export interface KnowledgeDependency {
+  id: string;
+  project_id: string;
+  dependency_key: string;
+  entity: string | null;
+  claim_ids: string[];
+  related_source_ids: string[];
+  involved_people: string[];
+  dependency_level: number;
+  risk_status: DependencyRiskStatus;
+  /** The reviewer's override when one exists, otherwise `risk_status`. */
+  effective_risk_status: DependencyRiskStatus;
+  evidence_summary: string | null;
+  missing_backup_information: string | null;
+  override: Record<string, unknown>;
+  computed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeDependencyListResponse {
+  items: KnowledgeDependency[];
+  total: number;
+}
+
+export interface KnowledgeDependencyOverrideInput {
+  risk_status: DependencyRiskStatus | null;
+  note: string;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §7 Missing knowledge detection
+// ---------------------------------------------------------------------------
+export type KnowledgeGapStatus = "Open" | "In Progress" | "Resolved" | "Accepted Risk";
+
+export interface KnowledgeGap {
+  id: string;
+  project_id: string;
+  gap_key: string;
+  category: string;
+  description: string;
+  criticality: RequirementCriticality;
+  related_claim_ids: string[];
+  related_source_ids: string[];
+  suggested_resolution: string | null;
+  status: KnowledgeGapStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeGapListResponse {
+  items: KnowledgeGap[];
+  total: number;
+}
+
+export interface KnowledgeGapStatusUpdateInput {
+  status: KnowledgeGapStatus;
+  note?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §8 Continuity scorecard
+// ---------------------------------------------------------------------------
+export interface HandoverReadinessSummary {
+  evaluation_id: string | null;
+  overall_score: number | null;
+  band: string | null;
+  dimension_scores: Record<string, DimensionScore>;
+  weights: Record<string, number>;
+  evaluated_at: string | null;
+  blocker_count: number;
+  warning_count: number;
+}
+
+export interface ContinuitySourceCoverage {
+  total_sources: number;
+  processed_sources: number;
+  github_sources: number;
+  sources_by_type: Record<string, number>;
+  approved_claims: number;
+  approved_claims_with_evidence: number;
+  evidence_coverage_percent: number;
+}
+
+export interface ContinuityScorecard {
+  project_id: string;
+  handover_readiness: HandoverReadinessSummary;
+  critical_blockers: ReadinessIssue[];
+  warnings: ReadinessIssue[];
+  pending_review_items: number;
+  conflicts: { open: number; total: number };
+  missing_knowledge: { open: number; accepted_risk: number };
+  knowledge_dependencies: { high_risk: number; unknown: number };
+  successor_tasks: Record<string, number> & { total: number };
+  source_coverage: ContinuitySourceCoverage;
+  last_evaluation_at: string | null;
+  generated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §4 Successor readiness workspace
+// ---------------------------------------------------------------------------
+export interface WorkspaceEvidenceRef {
+  source_name: string;
+  source_type: string | null;
+  location: string | null;
+  quote: string | null;
+  author: string | null;
+  source_date: string | null;
+  restricted: boolean;
+}
+
+/** A claim-backed workspace item (sections B–I). */
+export interface WorkspaceClaimItem {
+  claim_id: string;
+  text: string;
+  claim_type: ClaimType;
+  entity: string | null;
+  critical: boolean;
+  revision_number: number;
+  evidence: WorkspaceEvidenceRef[];
+}
+
+export interface WorkspaceReadiness {
+  score: number | null;
+  band: string | null;
+  blocker_count: number;
+  open_conflict_count: number;
+  open_gap_count: number;
+  task_count: number;
+}
+
+/** A task-backed workspace item (section J). Its key is `task_id`, not `id`. */
+export interface WorkspaceTaskItem {
+  task_id: string;
+  title: string;
+  description: string | null;
+  priority: SuccessorTaskPriority;
+  status: SuccessorTaskStatus;
+  owner: string | null;
+  completion_criteria: string | null;
+  origin: SuccessorTaskOrigin;
+  supporting_claim_ids: string[];
+  dependency_ids: string[];
+}
+
+export interface WorkspaceSection {
+  key: string;
+  title: string;
+  intro: string;
+  /** Claim-backed (A–I) or task-backed (J); the shapes differ by section. */
+  items: Array<WorkspaceClaimItem | WorkspaceTaskItem>;
+  empty_reason: string | null;
+  readiness?: WorkspaceReadiness | null;
+  blockers?: Array<{ code: string | null; message: string | null }> | null;
+  narrative?: string[] | null;
+}
+
+export interface WorkspaceHandoverRef {
+  published_version_id: string | null;
+  published_version_number: number | null;
+  published_at: string | null;
+}
+
+export interface SuccessorWorkspace {
+  project_id: string;
+  sections: WorkspaceSection[];
+  handover: WorkspaceHandoverRef;
+  counts: Record<string, number>;
+  open_gaps: Array<{
+    gap_id: string;
+    gap_key: string;
+    category: string;
+    description: string;
+    criticality: RequirementCriticality;
+    suggested_resolution: string | null;
+    status: KnowledgeGapStatus;
+  }>;
+  disclaimer: string;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §9–§10 Evaluation framework + successor exercise
+// ---------------------------------------------------------------------------
+export type EvaluationKind = "metrics" | "successor_exercise";
+export type ExerciseOutcome = "completed" | "blocked" | "missing_information";
+
+export interface ExerciseQuestionResult {
+  question_id: string;
+  prompt: string;
+  outcome: ExerciseOutcome;
+  answer: string | null;
+  supporting_claim_ids: string[];
+  explanation: string;
+}
+
+/** One metric block: its headline `value`, the counts behind it, and `undefined`. */
+export interface MetricBlock {
+  value: number;
+  undefined?: boolean;
+  [detail: string]: unknown;
+}
+
+export interface EvaluationReport {
+  dataset_version?: string;
+  disclaimer?: string;
+  questions?: ExerciseQuestionResult[];
+  A_claim_extraction?: MetricBlock;
+  B_evidence_accuracy?: MetricBlock;
+  C_verification_accuracy?: MetricBlock;
+  D_conflict_detection?: MetricBlock;
+  E_stale_detection?: MetricBlock;
+  F_critical_knowledge_coverage?: MetricBlock;
+  G_unsupported_handover_rate?: MetricBlock;
+  H_permission_leakage?: MetricBlock;
+  I_readiness_agreement?: MetricBlock;
+  [metric: string]: unknown;
+}
+
+export interface EvaluationRun {
+  id: string;
+  project_id: string | null;
+  kind: EvaluationKind;
+  dataset_version: string;
+  model_version: string | null;
+  configuration: Record<string, unknown>;
+  metrics: Record<string, number | boolean | string>;
+  failures: Array<Record<string, unknown>>;
+  report: EvaluationReport;
+  created_at: string;
+}
+
+export interface EvaluationRunListResponse {
+  items: EvaluationRun[];
+  total: number;
+}
+
+export interface EvaluationRunInput {
+  model_version?: string | null;
+}
+
+export interface EvaluationComparison {
+  project_id: string;
+  base_run_id: string;
+  candidate_run_id: string;
+  dataset_version: string;
+  deltas: Array<{ metric: string; before: unknown; after: unknown; delta?: number }>;
+  regressions: Array<{ metric: string; before: unknown; after: unknown; delta?: number }>;
+  improvements: Array<{ metric: string; before: unknown; after: unknown; delta?: number }>;
+  regression_count: number;
+  improvement_count: number;
+}
+
+export interface SyntheticSeedResponse {
+  project_id: string;
+  name: string;
+  sources: number;
+  dataset_version: string;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §12 System health
+// ---------------------------------------------------------------------------
+export interface ProcessingRunSummary {
+  run_id: string;
+  status: ProcessingRunStatus;
+  source_count: number;
+  claim_count: number;
+  verified_count: number;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface SystemHealth {
+  project_id: string;
+  database: "ok" | "unavailable";
+  status: "ok" | "degraded";
+  sources_by_status: Record<string, number>;
+  processing_runs_by_status: Record<string, number>;
+  claims_by_status: Record<string, number>;
+  recent_failures: Array<{
+    run_id: string;
+    status: string;
+    error: string | null;
+    errors: Array<Record<string, unknown>>;
+    created_at: string;
+  }>;
+  recent_runs: ProcessingRunSummary[];
 }
