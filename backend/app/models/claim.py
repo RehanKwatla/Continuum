@@ -11,6 +11,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -48,7 +49,7 @@ class Claim(Base):
     )
     entity: Mapped[str | None] = mapped_column(String(300), nullable=True)
     status: Mapped[ClaimStatus] = mapped_column(
-        sa_enum(ClaimStatus, "claim_status", length=16),
+        sa_enum(ClaimStatus, "claim_status", length=24),
         nullable=False,
         default=ClaimStatus.UNCERTAIN,
         server_default=ClaimStatus.UNCERTAIN.value,
@@ -80,6 +81,12 @@ class Claim(Base):
     verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # --- Phase 4 revisions ---------------------------------------------------
+    #: Monotonic revision counter. Revision 1 is the claim as first extracted;
+    #: a material edit appends a new revision and requires fresh approval.
+    revision_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
 
     created_at: Mapped[CreatedAt]
     updated_at: Mapped[UpdatedAt]
@@ -91,6 +98,14 @@ class Claim(Base):
         back_populates="claim", cascade="all, delete-orphan"
     )
     history: Mapped[list["ClaimHistory"]] = relationship(  # noqa: F821
+        back_populates="claim", cascade="all, delete-orphan"
+    )
+    revisions: Mapped[list["ClaimRevision"]] = relationship(  # noqa: F821
+        back_populates="claim",
+        cascade="all, delete-orphan",
+        order_by="ClaimRevision.revision_number",
+    )
+    decisions: Mapped[list["ClaimDecision"]] = relationship(  # noqa: F821
         back_populates="claim", cascade="all, delete-orphan"
     )
     run: Mapped["ProcessingRun | None"] = relationship(back_populates="claims")  # noqa: F821

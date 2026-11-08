@@ -104,38 +104,72 @@ You write a handover document using ONLY the approved claim list you are given.
 {_UNTRUSTED_GUARD}
 
 Rules:
-1. Every factual statement must cite the approved claims it is derived from, using
-   the handles you were given in the form "C1". Statements without a handle are
-   deleted by a deterministic validator before the document is shown to a human.
-2. Never introduce a fact that is not in the approved claims.
+1. Every statement of fact must cite the approved claims it is derived from, using
+   the handles you were given in the form "C1". The application validates and
+   assigns the references; a statement without a valid handle is deleted by a
+   deterministic validator before the document is shown to a human.
+2. Never introduce a fact that is not in the approved claims. If a section has no
+   approved claim behind it, return it with no statements — the application will
+   print "Information not established from the available evidence." itself.
 3. Never upgrade a claim: you cannot declare something verified, approved or
    complete unless the claim itself says so.
-4. Keep each statement short and operational.
-5. Output JSON only.
+4. Never invent owner names, deadlines, versions, configuration values or
+   completion states.
+5. You may propose next actions, but only in the "next_actions" section, and they
+   must be derived from an approved claim that is indicated for that action.
+6. Keep each statement short and operational.
+7. Output JSON only.
 
 Sections, in this order and with these exact keys:
-overview, decisions, responsibilities, current_state, unfinished_work,
-dependencies, risks, procedures, open_questions, next_actions
+overview, objectives, current_state, decisions, responsibilities, architecture,
+completed_work, unfinished_work, risks, procedures, outstanding_issues,
+open_questions, next_actions, critical_context
 
 Return exactly this JSON shape:
-{{"summary": "...", "sections": [{{"key": "overview", "title": "Project overview",
+{{"summary": "...", "sections": [{{"key": "overview", "title": "Executive project overview",
   "statements": [{{"text": "...", "claim_ids": ["C1"]}}]}}]}}"""
 
 HANDOVER_SECTIONS: tuple[tuple[str, str], ...] = (
-    ("overview", "Project overview"),
+    ("overview", "Executive project overview"),
+    ("objectives", "Project objectives"),
+    ("current_state", "Current project status"),
     ("decisions", "Important decisions"),
     ("responsibilities", "Responsibilities and ownership"),
-    ("current_state", "Current project state"),
-    ("unfinished_work", "Unfinished tasks"),
-    ("dependencies", "Technical dependencies"),
+    ("architecture", "Technical architecture and dependencies"),
+    ("completed_work", "Completed work"),
+    ("unfinished_work", "Incomplete work"),
     ("risks", "Known risks"),
     ("procedures", "Operational procedures"),
+    ("outstanding_issues", "Outstanding issues"),
     ("open_questions", "Unresolved questions"),
     ("next_actions", "Recommended next actions"),
+    ("critical_context", "Critical context for the successor"),
 )
 
 #: Sections whose content is advisory rather than a statement of fact.
 ADVISORY_SECTIONS: frozenset[str] = frozenset({"next_actions"})
+
+#: Default statement provenance per section. ``open_questions`` carries open
+#: questions rather than facts; ``next_actions`` carries suggestions.
+SECTION_STATEMENT_TYPES: dict[str, str] = {
+    "overview": "established_fact",
+    "objectives": "established_fact",
+    "current_state": "established_fact",
+    "decisions": "established_fact",
+    "responsibilities": "established_fact",
+    "architecture": "established_fact",
+    "completed_work": "established_fact",
+    "unfinished_work": "established_fact",
+    "risks": "established_fact",
+    "procedures": "established_fact",
+    "outstanding_issues": "established_fact",
+    "open_questions": "unresolved_question",
+    "next_actions": "suggested_action",
+    "critical_context": "established_fact",
+}
+
+#: Printed verbatim wherever the evidence does not establish a section's content.
+NOT_ESTABLISHED_PLACEHOLDER = "Information not established from the available evidence."
 
 
 def _format_evidence(chunks: list[EvidenceChunk]) -> str:

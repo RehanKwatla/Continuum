@@ -14,7 +14,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect as sa_inspect, select
 from sqlalchemy.orm import Session
 
 from app.ai.contracts import EvidenceChunk, ExtractedClaim
@@ -24,8 +24,10 @@ from app.ai.verifier import VerifierAgent
 from app.core.errors import ConflictError, NotFoundError, UpstreamError, ValidationAppError
 from app.models.claim import Claim
 from app.models.claim_history import ClaimHistory
+from app.models.audit import AuditLog
 from app.models.conflict import Conflict, ConflictClaim
 from app.models.enums import (
+    AccessLabel,
     ClaimStatus,
     ClaimType,
     ConflictStatus,
@@ -57,7 +59,10 @@ from app.schemas.memory import (
     UncertaintyResponse,
     VerificationRead,
 )
+from app.schemas.phase4 import ConflictClaimRead, ConflictDetail
+from app.services import claim_state_machine as machine
 from app.services.handover_validator import approved_claim_handles
+from app.services.review_service import ReviewService
 from app.workflow.graph import build_reconstruction_graph
 from app.workflow.nodes import finalise_run, status_from_verification
 from app.workflow.state import ReconstructionState
@@ -236,6 +241,7 @@ class MemoryService:
     def claim_detail(self, claim: Claim) -> ClaimDetail:
         counts = self._evidence_counts([claim.id])
         payload = _claim_payload(claim, counts.get(claim.id, 0), self._source_date(claim.id))
+        review = ReviewService(self.db)
         return ClaimDetail.model_validate(
             {
                 **payload,
@@ -247,6 +253,12 @@ class MemoryService:
                     ClaimHistoryRead.model_validate(row) for row in self._history(claim.id)
                 ],
                 "conflicts": self.conflicts_for_claim(claim.id),
+                # --- Phase 4 review context -------------------------------
+                "review_status": machine.review_status_label(claim.status),
+                "revision_number": claim.revision_number,
+                "allowed_transitions": machine.allowed_transitions(claim.status),
+                "revisions": review.revisions(claim.id),
+                "decisions": review.decisions(claim.id),
             }
         )
 
@@ -468,6 +480,15 @@ class MemoryService:
                 note=note,
             )
         )
+        project = self.db.get(Project, claim.project_id)
+        self.db.add(AuditLog(
+            user_id=user.id,
+            workspace_id=project.workspace_id if project else None,
+            action=f"claim_{history_action}",
+            resource_type="claim",
+            resource_id=claim.id,
+            meta={"note": note or "", "claim_status": claim.status.value},
+        ))
         self.db.commit()
         return claim
 
@@ -615,18 +636,28 @@ class MemoryService:
                     "key": section.key,
                     "title": section.title,
                     "statements": [
-                        {"text": item.text, "claim_ids": [str(cid) for cid in item.claim_ids]}
+                        {
+                            "statement_id": item.statement_id,
+                            "text": item.text,
+                            "statement_type": item.statement_type,
+                            "claim_ids": [str(cid) for cid in item.claim_ids],
+                            "claim_revisions": dict(item.claim_revisions or {}),
+                        }
                         for item in section.statements
                     ],
+                    "not_established": section.not_established,
+                    "placeholder": section.placeholder,
                 }
                 for section in validation.sections
-                if section.statements
             ],
             claim_ids=[str(claim_id) for claim_id in validation.claim_ids],
             validation_errors=[dict(item) for item in validation.errors],
             summary=validation.summary,
             model_name=getattr(provider, "model", None),
-            meta={"approved_claim_count": len(handover_input.claims)},
+            meta={
+                "approved_claim_count": len(handover_input.claims),
+                "claim_revisions": dict(validation.claim_revisions),
+            },
         )
         self.db.add(document)
         self.db.commit()
@@ -723,6 +754,63 @@ class MemoryService:
             }
         )
 
+    def conflict_detail(self, conflict: Conflict) -> ConflictDetail:
+        """Serialise a contradiction for the Conflict Resolution Centre (§6).
+
+        Both sides keep their own evidence: nothing is deleted or hidden when a
+        reviewer decides who wins. Restricted source text is withheld — the
+        reviewer sees that evidence exists without seeing protected content.
+        """
+        claim_ids = [
+            link.claim_id
+            for link in self.db.execute(
+                select(ConflictClaim).where(ConflictClaim.conflict_id == conflict.id)
+            ).scalars().all()
+        ]
+        claims = list(
+            self.db.execute(select(Claim).where(Claim.id.in_(claim_ids))).scalars().all()
+        ) if claim_ids else []
+        order = {claim_id: index for index, claim_id in enumerate(claim_ids)}
+        claims.sort(key=lambda row: order.get(row.id, 0))
+        dates = self._source_dates([claim.id for claim in claims])
+        meta = dict(conflict.resolution_meta or {})
+
+        payload: list[ConflictClaimRead] = []
+        for claim in claims:
+            evidence = [
+                ref.model_dump(mode="json")
+                for ref in self.evidence_refs(claim.id)
+                if ref.access_label is not AccessLabel.RESTRICTED
+            ]
+            payload.append(
+                ConflictClaimRead(
+                    id=claim.id,
+                    text=claim.text,
+                    claim_type=claim.claim_type,
+                    entity=claim.entity,
+                    status=claim.status,
+                    author=claim.author,
+                    confidence=claim.confidence,
+                    created_at=claim.created_at,
+                    source_date=dates.get(claim.id),
+                    evidence=evidence,
+                )
+            )
+
+        return ConflictDetail.model_validate(
+            {
+                **_orm_payload(conflict),
+                "resolution_label": meta.get("resolution_label"),
+                "could_be_temporal_change": bool(
+                    meta.get(
+                        "could_be_temporal_change",
+                        conflict.kind == "changed_over_time",
+                    )
+                ),
+                "claims": payload,
+            }
+        )
+
     def _chunks_for_claim(self, claim: Claim) -> list[EvidenceChunk]:
         refs = self.evidence_refs(claim.id)
         chunks: list[EvidenceChunk] = []
@@ -768,8 +856,15 @@ def _value(item: object) -> str:
 
 
 def _orm_payload(row: object) -> dict:
-    """Field values of an ORM row keyed by mapped attribute name."""
-    return {column.key: getattr(row, column.key) for column in row.__table__.columns}
+    """Field values of an ORM row keyed by mapped attribute name.
+
+    The mapper's attribute keys are used (not the physical column names) so a
+    column that is deliberately named differently on the database — e.g.
+    ``resolution_metadata`` for the Python attribute ``resolution_meta`` — is
+    still serialised under its attribute name.
+    """
+    mapper = sa_inspect(row).mapper
+    return {attr.key: getattr(row, attr.key) for attr in mapper.column_attrs}
 
 
 def _claim_payload(claim: Claim, evidence_count: int, source_date: datetime | None) -> dict:

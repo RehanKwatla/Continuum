@@ -313,6 +313,9 @@ class ApprovedClaimRef(BaseModel):
     claim_id: uuid.UUID
     claim_type: ClaimType
     text: str
+    #: The exact revision the reviewer approved. A statement may only cite a
+    #: claim whose revision still matches this value.
+    revision_number: int = 1
 
 
 class HandoverInput(BaseModel):
@@ -323,14 +326,32 @@ class HandoverInput(BaseModel):
 
 
 class HandoverStatement(BaseModel):
+    """One statement in a handover, carrying its provenance.
+
+    ``statement_id`` and ``statement_type`` are created by the application, never
+    by the model — the model only ever supplies ``text`` and ``claim_ids``.
+    """
+
+    statement_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     text: str
     claim_ids: list[uuid.UUID] = Field(default_factory=list)
+    #: ``established_fact`` | ``unresolved_question`` | ``reviewer_note`` |
+    #: ``suggested_action``
+    statement_type: str = "established_fact"
+    #: The claim revision each cited claim was approved at, keyed by claim id.
+    claim_revisions: dict[str, int] = Field(default_factory=dict)
+    #: Set when the deterministic validator could not substantiate the statement.
+    unsupported: bool = False
 
 
 class HandoverSection(BaseModel):
     key: str
     title: str
     statements: list[HandoverStatement] = Field(default_factory=list)
+    #: True when no approved claim supported the section; the placeholder text is
+    #: printed verbatim instead of inventing content.
+    not_established: bool = False
+    placeholder: str | None = None
 
 
 class HandoverValidation(BaseModel):
@@ -339,6 +360,8 @@ class HandoverValidation(BaseModel):
     summary: str | None = None
     sections: list[HandoverSection] = Field(default_factory=list)
     claim_ids: list[uuid.UUID] = Field(default_factory=list)
+    #: {claim_id (str): revision_number} for every claim used by the document.
+    claim_revisions: dict[str, int] = Field(default_factory=dict)
     errors: list[dict[str, Any]] = Field(default_factory=list)
 
     @property

@@ -8,6 +8,7 @@ from app.api.v1 import (
     auth,
     dashboard,
     github,
+    handover,
     health,
     memory,
     projects,
@@ -24,5 +25,6 @@ api_router.include_router(dashboard.router)
 api_router.include_router(sources.router)
 api_router.include_router(github.router)
 api_router.include_router(memory.router)
+api_router.include_router(handover.router)
 
 __all__ = ["api_router"]

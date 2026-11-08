@@ -97,12 +97,93 @@ EXTRACTABLE_CLAIM_TYPES: tuple[ClaimType, ...] = (
 
 
 class ClaimStatus(StrEnum):
-    """Only a human reviewer may move a claim to :attr:`VERIFIED`."""
+    """Review lifecycle of a claim.
 
+    Phase 4 adds the explicit review states the master prompt asks for. The
+    human-approved state is still spelled :attr:`VERIFIED` (it is what every
+    Phase 3 query and the handover validator already key on); the product
+    vocabulary for it is "Approved", exposed as ``review_status`` in the API.
+
+    Only a human reviewer may move a claim to :attr:`VERIFIED`.
+    """
+
+    #: Produced by the Extractor before any verification has run.
+    EXTRACTED = "Extracted"
     SUPPORTED = "Supported"
     UNCERTAIN = "Uncertain"
     CONFLICT = "Conflict"
+    #: Explicitly queued for a human decision.
+    PENDING_REVIEW = "Pending Review"
+    #: A reviewer asked for more information before deciding.
+    NEEDS_CLARIFICATION = "Needs Clarification"
+    REJECTED = "Rejected"
+    #: The only state that may enter an approved handover. = "Approved".
     VERIFIED = "Verified"
+
+
+#: The human-approved claim state (product vocabulary: "Approved").
+APPROVED_CLAIM_STATE: ClaimStatus = ClaimStatus.VERIFIED
+
+#: Statuses that still await a human decision.
+AWAITING_REVIEW_STATUSES: tuple[ClaimStatus, ...] = (
+    ClaimStatus.EXTRACTED,
+    ClaimStatus.SUPPORTED,
+    ClaimStatus.UNCERTAIN,
+    ClaimStatus.CONFLICT,
+    ClaimStatus.PENDING_REVIEW,
+    ClaimStatus.NEEDS_CLARIFICATION,
+)
+
+
+class HandoverLifecycleStatus(StrEnum):
+    """Lifecycle of a versioned handover (Phase 4 §12)."""
+
+    DRAFT = "Draft"
+    IN_REVIEW = "In Review"
+    APPROVED = "Approved"
+    PUBLISHED = "Published"
+    ARCHIVED = "Archived"
+
+
+class StatementType(StrEnum):
+    """Provenance class of a single handover statement (Phase 4 §10)."""
+
+    ESTABLISHED_FACT = "established_fact"
+    UNRESOLVED_QUESTION = "unresolved_question"
+    REVIEWER_NOTE = "reviewer_note"
+    SUGGESTED_ACTION = "suggested_action"
+
+
+#: Statement types that must cite at least one approved claim.
+EVIDENCE_BACKED_STATEMENT_TYPES: tuple[StatementType, ...] = (
+    StatementType.ESTABLISHED_FACT,
+)
+
+
+class ConflictResolution(StrEnum):
+    """How a reviewer decided a detected contradiction (Phase 4 §6)."""
+
+    ACCEPT_A = "claim_a_accepted"
+    ACCEPT_B = "claim_b_accepted"
+    BOTH_VALID_OVER_TIME = "both_valid_in_different_time_periods"
+    BOTH_REJECTED = "both_rejected"
+    MORE_INFO_REQUIRED = "more_information_required"
+    DISMISSED = "dismissed"
+
+
+#: Resolutions that leave the conflict open (awaiting further input).
+OPEN_CONFLICT_RESOLUTIONS: tuple[ConflictResolution, ...] = (
+    ConflictResolution.MORE_INFO_REQUIRED,
+)
+
+
+class ReviewDecision(StrEnum):
+    """A reviewer's recorded decision on a claim revision (Phase 4 §7)."""
+
+    APPROVE = "approve"
+    REJECT = "reject"
+    CLARIFICATION = "clarification"
+    REQUEST_EVIDENCE = "request_evidence"
 
 
 class VerificationVerdict(StrEnum):

@@ -21,9 +21,12 @@ import type {
   ClaimStatus,
   ClaimType,
   ConflictKind,
+  ConflictResolution,
   ConflictStatus,
   FreshnessStatus,
+  HandoverLifecycleStatus,
   ProcessingRunStatus,
+  StatementType,
   VerificationVerdict,
 } from "@/types";
 
@@ -64,6 +67,11 @@ export const CLAIM_TYPE_ORDER: ClaimType[] = [
 ];
 
 export const CLAIM_STATUS_META: Record<ClaimStatus, { label: string; tone: Tone; hint: string }> = {
+  Extracted: {
+    label: "Extracted",
+    tone: "secondary",
+    hint: "Captured from a source but not yet assessed by the verifier.",
+  },
   Supported: {
     label: "Supported",
     tone: "info",
@@ -79,12 +87,136 @@ export const CLAIM_STATUS_META: Record<ClaimStatus, { label: string; tone: Tone;
     tone: "danger",
     hint: "Another claim contradicts this one. A reviewer must decide.",
   },
+  "Pending Review": {
+    label: "Pending review",
+    tone: "info",
+    hint: "Queued for a human decision. AI verification is not an approval.",
+  },
+  "Needs Clarification": {
+    label: "Needs clarification",
+    tone: "warn",
+    hint: "A reviewer asked for clarification or additional evidence before deciding.",
+  },
+  Rejected: {
+    label: "Rejected",
+    tone: "danger",
+    hint: "A reviewer rejected this claim. It can never enter an approved handover.",
+  },
   Verified: {
-    label: "Verified",
+    label: "Approved",
     tone: "ok",
-    hint: "Approved by a human reviewer. Only a human can verify a claim.",
+    hint: "Approved by a human reviewer. Only a human can approve a claim.",
   },
 };
+
+/** The order review-queue filters and explorer chips are shown in. */
+export const CLAIM_STATUS_ORDER: ClaimStatus[] = [
+  "Extracted",
+  "Supported",
+  "Uncertain",
+  "Conflict",
+  "Pending Review",
+  "Needs Clarification",
+  "Rejected",
+  "Verified",
+];
+
+/** Filters offered by the human review queue (§3). */
+export const REVIEW_QUEUE_FILTERS: Array<{ value: string; label: string; hint: string }> = [
+  { value: "all", label: "All", hint: "Every claim in the project." },
+  { value: "pending", label: "Pending review", hint: "Waiting for a human decision." },
+  { value: "supported", label: "Supported", hint: "The verifier found supporting evidence." },
+  { value: "uncertain", label: "Uncertain", hint: "Evidence was insufficient." },
+  { value: "conflict", label: "Conflict", hint: "Contradicted by another claim." },
+  { value: "critical", label: "Critical claims", hint: "Flagged as critical to the handover." },
+  { value: "clarification", label: "Needs clarification", hint: "Awaiting more information." },
+  { value: "rejected", label: "Rejected", hint: "Rejected by a reviewer." },
+  { value: "approved", label: "Approved", hint: "Human-approved; eligible for the handover." },
+];
+
+export const REVIEW_QUEUE_ORDERS: Array<{ value: string; label: string }> = [
+  { value: "critical", label: "Criticality" },
+  { value: "recent", label: "Most recent" },
+  { value: "oldest", label: "Oldest" },
+  { value: "verification", label: "Verification status" },
+];
+
+/** Lifecycle presentation for a versioned handover (§12). */
+export const HANDOVER_STATUS_META: Record<HandoverLifecycleStatus, { label: string; tone: Tone }> = {
+  Draft: { label: "Draft", tone: "secondary" },
+  "In Review": { label: "In review", tone: "info" },
+  Approved: { label: "Approved", tone: "ok" },
+  Published: { label: "Published", tone: "ok" },
+  Archived: { label: "Archived", tone: "secondary" },
+};
+
+/** Provenance class of a handover statement (§10). */
+export const STATEMENT_TYPE_META: Record<StatementType, { label: string; tone: Tone; hint: string }> =
+  {
+    established_fact: {
+      label: "Established fact",
+      tone: "ok",
+      hint: "Backed by at least one human-approved claim.",
+    },
+    unresolved_question: {
+      label: "Unresolved question",
+      tone: "warn",
+      hint: "Still unknown from the available evidence.",
+    },
+    reviewer_note: {
+      label: "Reviewer note",
+      tone: "info",
+      hint: "Authored by a reviewer, not an established project fact.",
+    },
+    suggested_action: {
+      label: "Suggested action",
+      tone: "secondary",
+      hint: "A recommendation derived from approved project context.",
+    },
+  };
+
+/** The five reviewer outcomes for a contradiction (§6). */
+export const CONFLICT_RESOLUTION_OPTIONS: Array<{
+  value: ConflictResolution;
+  label: string;
+  hint: string;
+  requiresChoice: boolean;
+}> = [
+  {
+    value: "claim_a_accepted",
+    label: "Claim A is accepted",
+    hint: "Claim A stands; claim B becomes Uncertain.",
+    requiresChoice: true,
+  },
+  {
+    value: "claim_b_accepted",
+    label: "Claim B is accepted",
+    hint: "Claim B stands; claim A becomes Uncertain.",
+    requiresChoice: true,
+  },
+  {
+    value: "both_valid_in_different_time_periods",
+    label: "Both are valid in different time periods",
+    hint: "Not a contradiction: the value changed over time. Both are kept.",
+    requiresChoice: false,
+  },
+  {
+    value: "both_rejected",
+    label: "Both are rejected",
+    hint: "Neither statement is reliable; both claims are preserved as Rejected.",
+    requiresChoice: false,
+  },
+  {
+    value: "more_information_required",
+    label: "More information is required",
+    hint: "The conflict stays open until further evidence is available.",
+    requiresChoice: false,
+  },
+];
+
+export const CONFLICT_RESOLUTION_LABELS: Record<string, string> = Object.fromEntries(
+  CONFLICT_RESOLUTION_OPTIONS.map((option) => [option.value, option.label]),
+);
 
 export const VERDICT_META: Record<VerificationVerdict, { label: string; tone: Tone }> = {
   supports: { label: "Supports", tone: "ok" },

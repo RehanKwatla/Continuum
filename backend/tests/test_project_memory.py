@@ -252,21 +252,45 @@ def _first_supported_claim(client, project_id, headers) -> dict:
     return listing["items"][0]
 
 
+def _approvable_claim(client, project_id, headers) -> dict:
+    """A supported claim that is *not* part of an undecided conflict.
+
+    Phase 4 forbids approving a claim while a conflict it belongs to is still
+    open, so the handover test must pick a claim the reviewers could actually
+    approve.
+    """
+    listing = client.get(
+        f"/api/v1/projects/{project_id}/claims",
+        params={"status": "Supported", "page_size": 100},
+        headers=headers,
+    ).json()
+    for claim in listing["items"]:
+        detail = client.get(
+            f"/api/v1/projects/{project_id}/claims/{claim['id']}", headers=headers
+        ).json()
+        if not any(item["status"] == "open" for item in detail["conflicts"]):
+            return claim
+    raise AssertionError("no claim outside an open conflict was produced")
+
+
 def test_review_is_the_only_path_to_verified(
     client, project, auth_headers, reconstructed
 ) -> None:
-    claim = _first_supported_claim(client, project["id"], auth_headers)
+    claim = _approvable_claim(client, project["id"], auth_headers)
 
     approved = client.post(
         f"/api/v1/projects/{project['id']}/claims/{claim['id']}/review",
-        json={"action": "approve", "note": "Reviewed during handover."},
+        json={"decision": "approve", "explanation": "Reviewed during handover."},
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text
     body = approved.json()
     assert body["status"] == "Verified"
+    # The product word for Verified is "Approved"; it is never inferred from AI.
+    assert body["review_status"] == "Approved"
     assert body["verified_at"]
     assert any(entry["action"] == "approved" for entry in body["history"])
+    assert body["decisions"] and body["decisions"][0]["decision"] == "approve"
 
     # A model re-verification must never overwrite the human decision.
     _override_provider(FakeProvider())
@@ -280,17 +304,43 @@ def test_review_is_the_only_path_to_verified(
     assert reverify.status_code == 409
 
 
-def test_review_rejection_returns_a_claim_to_uncertain(
+def test_review_rejection_is_recorded_as_rejected(
     client, project, auth_headers, reconstructed
 ) -> None:
     claim = _first_supported_claim(client, project["id"], auth_headers)
     rejected = client.post(
-        f"/api/v1/projects/{project['id']}/claims/{claim['id']}/review",
-        json={"action": "reject", "note": "Not supported by the documentation."},
+        f"/api/v1/projects/{project['id']}/claims/{claim['id']}/reject",
+        json={"explanation": "Not supported by the documentation."},
         headers=auth_headers,
     )
     assert rejected.status_code == 200, rejected.text
-    assert rejected.json()["status"] == "Uncertain"
+    assert rejected.json()["status"] == "Rejected"
+
+    # A rejected claim can never enter an approved handover: approving it is a
+    # 409, not a silent success.
+    block = client.post(
+        f"/api/v1/projects/{project['id']}/claims/{claim['id']}/approve",
+        json={"explanation": "Attempt."},
+        headers=auth_headers,
+    )
+    assert block.status_code == 409, block.text
+
+
+def test_claim_edit_creates_a_revision_that_needs_verification(
+    client, project, auth_headers, reconstructed
+) -> None:
+    claim = _first_supported_claim(client, project["id"], auth_headers)
+    edited = client.post(
+        f"/api/v1/projects/{project['id']}/claims/{claim['id']}/edit",
+        json={"text": "The production database engine is PostgreSQL.", "note": "Reworded."},
+        headers=auth_headers,
+    )
+    assert edited.status_code == 200, edited.text
+    body = edited.json()
+    assert body["revision_number"] == 2
+    assert body["review_status"] == "Pending review"
+    assert [item["revision_number"] for item in body["revisions"]] == [1, 2]
+    assert body["revisions"][1]["verification_required"] is True
 
 
 def test_conflict_resolution_is_recorded(
@@ -301,25 +351,32 @@ def test_conflict_resolution_is_recorded(
         params={"kind": "value_disagreement"},
         headers=auth_headers,
     ).json()["items"][0]
-    chosen = conflict["claims"][0]["id"]
+    detail = client.get(
+        f"/api/v1/projects/{project['id']}/conflicts/{conflict['id']}", headers=auth_headers
+    ).json()
+    assert len(detail["claims"]) >= 2
+    assert detail["could_be_temporal_change"] in (True, False)
+    chosen = detail["claims"][0]["id"]
 
     response = client.post(
         f"/api/v1/projects/{project['id']}/conflicts/{conflict['id']}/resolve",
         json={
-            "action": "resolve",
+            "resolution": "claim_a_accepted",
             "note": "The newer commit is authoritative.",
             "chosen_claim_id": chosen,
         },
         headers=auth_headers,
     )
     assert response.status_code == 200, response.text
-    assert response.json()["status"] == "resolved"
+    body = response.json()
+    assert body["status"] == "resolved"
+    assert body["resolution_label"] == "Claim A accepted"
 
-    detail = client.get(
+    claim_detail = client.get(
         f"/api/v1/projects/{project['id']}/claims/{chosen}", headers=auth_headers
     ).json()
-    assert detail["status"] == "Supported"
-    assert any(entry["action"] == "conflict_resolved" for entry in detail["history"])
+    assert claim_detail["status"] == "Supported"
+    assert any(entry["action"] == "conflict_resolved" for entry in claim_detail["history"])
 
 
 # ---------------------------------------------------------------------------
@@ -327,18 +384,20 @@ def test_conflict_resolution_is_recorded(
 # ---------------------------------------------------------------------------
 def test_handover_requires_generation_first(client, project, auth_headers) -> None:
     response = client.get(
-        f"/api/v1/projects/{project['id']}/handover", headers=auth_headers
+        f"/api/v1/projects/{project['id']}/handovers", headers=auth_headers
     )
-    assert response.status_code == 404
+    assert response.status_code == 200, response.text
+    assert response.json()["meta"]["total"] == 0
+    assert response.json()["items"] == []
 
 
 def test_handover_uses_approved_claims_only(
     client, project, auth_headers, reconstructed
 ) -> None:
-    claim = _first_supported_claim(client, project["id"], auth_headers)
+    claim = _approvable_claim(client, project["id"], auth_headers)
     approve = client.post(
-        f"/api/v1/projects/{project['id']}/claims/{claim['id']}/review",
-        json={"action": "approve", "note": "Approved."},
+        f"/api/v1/projects/{project['id']}/claims/{claim['id']}/approve",
+        json={"explanation": "Approved."},
         headers=auth_headers,
     )
     assert approve.status_code == 200, approve.text
@@ -346,32 +405,42 @@ def test_handover_uses_approved_claims_only(
     _override_provider(FakeProvider())
     try:
         response = client.post(
-            f"/api/v1/projects/{project['id']}/handover/generate", headers=auth_headers
+            f"/api/v1/projects/{project['id']}/handovers/generate", headers=auth_headers
         )
     finally:
         _clear_provider()
 
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["claim_ids"] == [claim["id"]]
+    version = body["current"]
+    assert version["version_number"] == 1
+    assert version["included_claim_ids"] == [claim["id"]]
 
     statements = [
         statement
-        for section in body["sections"]
+        for section in version["sections"]
         for statement in section["statements"]
     ]
     assert statements, "the handover must contain at least one linked statement"
     assert all(statement["claim_ids"] for statement in statements)
+    assert all(
+        statement["statement_type"] == "established_fact" for statement in statements
+    )
 
     # The deterministic validator deleted the sentence that cited no claim.
     # It survives only in the validation log, never in the handover body.
-    assert any(error["code"] == "unlinked_sentence" for error in body["validation_errors"])
-    assert "celebrate" not in json.dumps(body["sections"])
+    assert any(
+        error["code"] == "unlinked_sentence" for error in version["validation_errors"]
+    )
+    assert "celebrate" not in json.dumps(version["sections"])
 
-    latest = client.get(
-        f"/api/v1/projects/{project['id']}/handover", headers=auth_headers
+    # Generating a handover never approves a claim: the approved count is
+    # unchanged, and a non-approved claim can never be referenced.
+    listing = client.get(
+        f"/api/v1/projects/{project['id']}/handovers", headers=auth_headers
     ).json()
-    assert latest["id"] == body["id"]
+    assert listing["meta"]["total"] == 1
+    assert listing["items"][0]["id"] == body["id"]
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +453,9 @@ MEMORY_READ_ROUTES = (
     "/questions",
     "/uncertainty",
     "/processing-runs",
-    "/handover",
+    "/review-queue",
+    "/handovers",
+    "/audit",
 )
 
 

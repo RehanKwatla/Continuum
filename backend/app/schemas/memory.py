@@ -26,6 +26,7 @@ from app.models.enums import (
     VerificationVerdict,
 )
 from app.schemas.common import PageMeta
+from app.schemas.phase4 import ClaimDecisionRead, ClaimRevisionRead
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +159,17 @@ class ClaimDetail(ClaimSummary):
     verifications: list[VerificationRead] = Field(default_factory=list)
     history: list[ClaimHistoryRead] = Field(default_factory=list)
     conflicts: list["ConflictSummary"] = Field(default_factory=list)
+    # --- Phase 4 human review -------------------------------------------------
+    #: Human-facing review status; "Approved" is the product word for Verified.
+    review_status: str | None = None
+    #: Which revision of the statement this claim currently carries.
+    revision_number: int = 1
+    #: Legal next states, so the UI can hide — never enforce — actions.
+    allowed_transitions: list[str] = Field(default_factory=list)
+    #: Every preserved revision of the statement (oldest first).
+    revisions: list["ClaimRevisionRead"] = Field(default_factory=list)
+    #: Every human decision recorded against a revision (newest first).
+    decisions: list["ClaimDecisionRead"] = Field(default_factory=list)
 
 
 class ClaimListResponse(BaseModel):

@@ -23,6 +23,8 @@ import ConflictCentre from "@/pages/ConflictCentre";
 import UncertaintyCentre from "@/pages/UncertaintyCentre";
 import DecisionTimeline from "@/pages/DecisionTimeline";
 import HandoverPreview from "@/pages/HandoverPreview";
+import ReviewQueue from "@/pages/ReviewQueue";
+import AuditTrail from "@/pages/AuditTrail";
 
 /**
  * Every authenticated screen renders inside the AppShell via ProtectedRoute,
@@ -54,6 +56,7 @@ export function AppRouter() {
 
         <Route path="/projects/:projectId/memory" element={<MemoryLayout />}>
           <Route index element={<ProjectMemory />} />
+          <Route path="review" element={<ReviewQueue />} />
           <Route path="claims" element={<ClaimsExplorer />} />
           <Route path="claims/:claimId" element={<ClaimDetailPage />} />
           <Route path="conflicts" element={<ConflictCentre />} />
@@ -61,6 +64,7 @@ export function AppRouter() {
           <Route path="timeline" element={<DecisionTimeline />} />
         </Route>
         <Route path="/projects/:projectId/handover" element={<HandoverPreview />} />
+        <Route path="/projects/:projectId/audit" element={<AuditTrail />} />
 
         <Route path="/sources" element={<Sources />} />
         <Route path="/sources/:sourceId" element={<SourceDetails />} />

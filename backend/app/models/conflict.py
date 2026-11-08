@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.enums import ClaimType, ConflictStatus
-from app.models.types import CreatedAt, UuidFK, UuidPK, sa_enum
+from app.models.types import CreatedAt, JsonObject, UuidFK, UuidPK, sa_enum
 
 
 class Conflict(Base):
@@ -50,6 +50,13 @@ class Conflict(Base):
     )
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Phase 4: which of the five resolution options the reviewer chose.
+    #: Stored as its own column so the contradiction and its resolution are kept
+    #: separately — the original claims and evidence are never deleted.
+    resolution: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    resolution_meta: Mapped[JsonObject] = mapped_column(
+        "resolution_metadata", nullable=False, default=dict
+    )
     resolved_by_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

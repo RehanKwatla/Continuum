@@ -1,10 +1,18 @@
-"""Project-memory endpoints: reconstruction, review and handover.
+"""Project-memory endpoints: reconstruction, review and conflicts.
 
 Every route resolves project access first (workspace membership is enforced by
 :func:`resolve_project_access`), so a source can never reach the workflow without
-authorisation. Reads require *viewer*, reconstruction and verification require
-*member*, and the two governance actions — approving a claim and resolving a
-conflict — require *admin*.
+authorisation. Reads require *viewer*, reconstruction and model verification
+require *member*, and the human governance actions — reviewing, approving,
+editing or rejecting a claim, and resolving a conflict — require *admin*.
+
+Phase 4 splits the two things that used to be conflated:
+
+* **AI verification** is an *evidence assessment* produced by the model
+  (``POST /claims/{id}/verify``). It can never approve anything.
+* **Human approval** is an explicit reviewer decision recorded against one exact
+  claim revision (``POST /claims/{id}/review`` and the dedicated
+  ``/approve``, ``/reject``, ``/request-clarification`` actions).
 
 No endpoint invents data. A project that has not been reconstructed returns
 ``reconstructed: false``; an unconfigured model returns **503** rather than a
@@ -18,28 +26,30 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import func, select
 
 from app.ai.provider import GeminiProvider, LLMProvider
 from app.core.dependencies import CurrentUser, DbSession, resolve_project_access
-from app.core.errors import NotConfiguredError, NotFoundError
+from app.core.errors import NotConfiguredError
 from app.models.enums import (
+    AccessLabel,
     ClaimStatus,
     ClaimType,
     ConflictStatus,
+    FreshnessStatus,
     OpenQuestionStatus,
     ProcessingRunStatus,
     WorkspaceRole,
 )
+from app.models.claim import Claim
+from app.models.conflict import Conflict, ConflictClaim
 from app.models.processing_run import ProcessingRun
+from app.models.verification import Verification
 from app.schemas.common import build_page_meta
 from app.schemas.memory import (
     ClaimDetail,
     ClaimListResponse,
-    ClaimReviewRequest,
     ConflictListResponse,
-    ConflictResolveRequest,
-    ConflictSummary,
-    HandoverRead,
     OpenQuestionListResponse,
     ProcessingRunListResponse,
     ProcessingRunRead,
@@ -47,7 +57,19 @@ from app.schemas.memory import (
     ReconstructRequest,
     UncertaintyResponse,
 )
+from app.schemas.phase4 import (
+    ClaimActionRequest,
+    ClaimDecisionRequest,
+    ClaimEditRequest,
+    ConflictDetail,
+    ConflictResolutionRequest,
+    ReviewQueueItem,
+    ReviewQueueResponse,
+)
+from app.services import claim_state_machine as machine
+from app.services.conflict_resolution import ConflictCentreService
 from app.services.memory_service import MemoryService, reconstruct_project
+from app.services.review_service import ReviewService, statuses_for_filter
 
 router = APIRouter(prefix="/projects", tags=["memory"])
 
@@ -69,10 +91,26 @@ _NOT_CONFIGURED_MESSAGE = (
 )
 
 
-def _require_provider(provider: LLMProvider | None) -> LLMProvider:
+def require_provider(provider: LLMProvider | None) -> LLMProvider:
+    """Reject a request that needs the model when none is configured (503)."""
     if provider is None:
         raise NotConfiguredError(_NOT_CONFIGURED_MESSAGE, code="ai_not_configured")
     return provider
+
+
+def _require_reviewer(
+    db: DbSession, *, project_id: uuid.UUID, user: CurrentUser
+) -> WorkspaceRole:
+    """Assert the caller may record a human decision and return their role.
+
+    The frontend hides actions a user may not take, but that is cosmetic: the
+    authority check lives here, and the review service re-checks the role before
+    it writes anything.
+    """
+    _, role = resolve_project_access(
+        db, project_id=project_id, user=user, required_role=WorkspaceRole.ADMIN
+    )
+    return role
 
 
 # ---------------------------------------------------------------------------
@@ -154,8 +192,266 @@ def list_processing_runs(
 
 
 # ---------------------------------------------------------------------------
-# Claims
+# Human review queue (§3)
 # ---------------------------------------------------------------------------
+@router.get(
+    "/{project_id}/review-queue",
+    response_model=ReviewQueueResponse,
+    summary="List claims for human review with evidence and staleness indicators",
+)
+def review_queue(
+    project_id: uuid.UUID,
+    user: CurrentUser,
+    db: DbSession,
+    status_filter: str | None = Query(
+        default=None,
+        alias="status",
+        description=(
+            "all | pending | supported | uncertain | conflict | critical | resolved "
+            "| approved | rejected | clarification"
+        ),
+    ),
+    critical: bool | None = None,
+    order: str = Query(default="recent", pattern="^(critical|recent|oldest|verification)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> ReviewQueueResponse:
+    resolve_project_access(db, project_id=project_id, user=user, required_role=WorkspaceRole.VIEWER)
+    review = ReviewService(db)
+
+    query = select(Claim).where(Claim.project_id == project_id)
+    filter_name = status_filter.casefold() if status_filter else None
+    if filter_name == "critical":
+        # "Critical" is not a status: it filters on the criticality flag.
+        query = query.where(Claim.critical.is_(True))
+    else:
+        statuses = statuses_for_filter(filter_name)
+        if statuses:
+            query = query.where(Claim.status.in_(statuses))
+    if critical is not None:
+        query = query.where(Claim.critical == critical)
+
+    count = int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
+
+    if order == "critical":
+        query = query.order_by(Claim.critical.desc(), Claim.created_at.desc())
+    elif order == "oldest":
+        query = query.order_by(Claim.created_at.asc())
+    elif order == "verification":
+        query = query.order_by(Claim.status.asc(), Claim.created_at.desc())
+    else:
+        query = query.order_by(Claim.created_at.desc())
+
+    claims = list(db.scalars(query.limit(page_size).offset((page - 1) * page_size)).all())
+
+    items: list[ReviewQueueItem] = []
+    for claim in claims:
+        evidence_rows = review.accessible_evidence(claim.id)
+        accessible = [
+            (evidence, source)
+            for evidence, source in evidence_rows
+            if source.access_label is not AccessLabel.RESTRICTED
+        ]
+        latest = db.scalar(
+            select(Verification)
+            .where(Verification.claim_id == claim.id)
+            .order_by(Verification.created_at.desc())
+            .limit(1)
+        )
+        conflict_statuses = db.scalars(
+            select(Conflict.status)
+            .join(ConflictClaim, ConflictClaim.conflict_id == Conflict.id)
+            .where(ConflictClaim.claim_id == claim.id)
+        ).all()
+        if ConflictStatus.OPEN in conflict_statuses:
+            conflict_status = "open"
+        elif conflict_statuses:
+            conflict_status = "resolved"
+        else:
+            conflict_status = "clear"
+        stale = any(source.freshness is not FreshnessStatus.CURRENT for _, source in accessible)
+        items.append(
+            ReviewQueueItem(
+                id=claim.id,
+                text=claim.text,
+                category=claim.claim_type,
+                critical=claim.critical,
+                ai_verdict=latest.verdict.value if latest else None,
+                evidence_count=len(accessible),
+                source_references=[
+                    f"{source.source_name}"
+                    + (f" · {evidence.source_location}" if evidence.source_location else "")
+                    for evidence, source in accessible
+                ],
+                conflict_status=conflict_status,
+                stale_warning=stale,
+                created_at=claim.created_at,
+                # AI verification and human approval are separate columns.
+                review_status=machine.review_status_label(claim.status),
+                status=claim.status,
+                revision_number=claim.revision_number,
+            )
+        )
+    return ReviewQueueResponse(items=items, meta=build_page_meta(count, page, page_size))
+
+
+# ---------------------------------------------------------------------------
+# Claim inspection and human review (§4, §5, §7)
+# ---------------------------------------------------------------------------
+def _apply_decision(
+    db: DbSession,
+    claim: Claim,
+    *,
+    user: CurrentUser,
+    role: WorkspaceRole,
+    decision: str,
+    explanation: str | None,
+    request_evidence: bool = False,
+) -> None:
+    """Route one human decision to the approval engine.
+
+    All four outcomes go through :class:`ReviewService`, which enforces the
+    state machine, the evidence requirement, the conflict gate and the
+    transaction — never the request body and never the browser.
+    """
+    service = ReviewService(db)
+    if decision == "approve":
+        service.approve(claim, user=user, role=role, explanation=explanation)
+    elif decision == "reject":
+        service.reject(claim, user=user, role=role, explanation=explanation)
+    else:
+        service.request_clarification(
+            claim,
+            user=user,
+            role=role,
+            explanation=explanation,
+            request_evidence=request_evidence or decision == "request_evidence",
+        )
+
+
+@router.post(
+    "/{project_id}/claims/{claim_id}/review",
+    response_model=ClaimDetail,
+    summary="Record a human claim decision: approve, reject or request clarification",
+)
+def review_claim(
+    project_id: uuid.UUID,
+    claim_id: uuid.UUID,
+    payload: ClaimDecisionRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> ClaimDetail:
+    role = _require_reviewer(db, project_id=project_id, user=user)
+    service = MemoryService(db)
+    claim = service.get_claim(project_id, claim_id)
+    _apply_decision(
+        db,
+        claim,
+        user=user,
+        role=role,
+        decision=payload.decision,
+        explanation=payload.explanation,
+    )
+    return service.claim_detail(claim)
+
+
+@router.post(
+    "/{project_id}/claims/{claim_id}/approve",
+    response_model=ClaimDetail,
+    summary="Approve a claim (the only path to an approved claim)",
+)
+def approve_claim(
+    project_id: uuid.UUID,
+    claim_id: uuid.UUID,
+    user: CurrentUser,
+    db: DbSession,
+    payload: ClaimActionRequest | None = None,
+) -> ClaimDetail:
+    role = _require_reviewer(db, project_id=project_id, user=user)
+    service = MemoryService(db)
+    claim = service.get_claim(project_id, claim_id)
+    _apply_decision(
+        db, claim, user=user, role=role, decision="approve",
+        explanation=payload.explanation if payload else None,
+    )
+    return service.claim_detail(claim)
+
+
+@router.post(
+    "/{project_id}/claims/{claim_id}/reject",
+    response_model=ClaimDetail,
+    summary="Reject a claim; it can never enter an approved handover",
+)
+def reject_claim(
+    project_id: uuid.UUID,
+    claim_id: uuid.UUID,
+    user: CurrentUser,
+    db: DbSession,
+    payload: ClaimActionRequest | None = None,
+) -> ClaimDetail:
+    role = _require_reviewer(db, project_id=project_id, user=user)
+    service = MemoryService(db)
+    claim = service.get_claim(project_id, claim_id)
+    _apply_decision(
+        db, claim, user=user, role=role, decision="reject",
+        explanation=payload.explanation if payload else None,
+    )
+    return service.claim_detail(claim)
+
+
+@router.post(
+    "/{project_id}/claims/{claim_id}/request-clarification",
+    response_model=ClaimDetail,
+    summary="Ask for clarification or additional evidence before deciding",
+)
+def request_clarification(
+    project_id: uuid.UUID,
+    claim_id: uuid.UUID,
+    payload: ClaimActionRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> ClaimDetail:
+    role = _require_reviewer(db, project_id=project_id, user=user)
+    service = MemoryService(db)
+    claim = service.get_claim(project_id, claim_id)
+    _apply_decision(
+        db,
+        claim,
+        user=user,
+        role=role,
+        decision="clarification",
+        explanation=payload.explanation,
+        request_evidence=payload.request_evidence,
+    )
+    return service.claim_detail(claim)
+
+
+@router.post(
+    "/{project_id}/claims/{claim_id}/edit",
+    response_model=ClaimDetail,
+    summary="Correct a claim's statement as a new revision that must be re-verified",
+)
+def edit_claim(
+    project_id: uuid.UUID,
+    claim_id: uuid.UUID,
+    payload: ClaimEditRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> ClaimDetail:
+    _require_reviewer(db, project_id=project_id, user=user)
+    service = MemoryService(db)
+    claim = service.get_claim(project_id, claim_id)
+    ReviewService(db).edit_claim(
+        claim,
+        user=user,
+        text=payload.text,
+        claim_type=payload.claim_type,
+        entity=payload.entity,
+        note=payload.note,
+    )
+    return service.claim_detail(claim)
+
+
 @router.get(
     "/{project_id}/claims",
     response_model=ClaimListResponse,
@@ -201,7 +497,7 @@ def list_claims(
 @router.get(
     "/{project_id}/claims/{claim_id}",
     response_model=ClaimDetail,
-    summary="Get a claim with its evidence, verifications and history",
+    summary="Get a claim with its evidence, verifications, revisions and history",
 )
 def get_claim(
     project_id: uuid.UUID, claim_id: uuid.UUID, user: CurrentUser, db: DbSession
@@ -228,31 +524,10 @@ def verify_claim(
     resolve_project_access(
         db, project_id=project_id, user=user, required_role=WorkspaceRole.MEMBER
     )
-    _require_provider(provider)
+    require_provider(provider)
     service = MemoryService(db)
     claim = service.get_claim(project_id, claim_id)
     service.verify_claim(claim, provider=provider)
-    return service.claim_detail(claim)
-
-
-@router.post(
-    "/{project_id}/claims/{claim_id}/review",
-    response_model=ClaimDetail,
-    summary="Human review: approve (Verified) or reject a claim (admins only)",
-)
-def review_claim(
-    project_id: uuid.UUID,
-    claim_id: uuid.UUID,
-    payload: ClaimReviewRequest,
-    user: CurrentUser,
-    db: DbSession,
-) -> ClaimDetail:
-    resolve_project_access(
-        db, project_id=project_id, user=user, required_role=WorkspaceRole.ADMIN
-    )
-    service = MemoryService(db)
-    claim = service.get_claim(project_id, claim_id)
-    service.review_claim(claim, user=user, action=payload.action, note=payload.note)
     return service.claim_detail(claim)
 
 
@@ -282,35 +557,50 @@ def list_conflicts(
     return ConflictListResponse(items=items, meta=build_page_meta(total, page, page_size))
 
 
+@router.get(
+    "/{project_id}/conflicts/{conflict_id}",
+    response_model=ConflictDetail,
+    summary="Inspect a contradiction with the evidence behind both sides",
+)
+def get_conflict(
+    project_id: uuid.UUID, conflict_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> ConflictDetail:
+    resolve_project_access(
+        db, project_id=project_id, user=user, required_role=WorkspaceRole.VIEWER
+    )
+    service = MemoryService(db)
+    return service.conflict_detail(service.get_conflict(project_id, conflict_id))
+
+
 @router.post(
     "/{project_id}/conflicts/{conflict_id}/resolve",
-    response_model=ConflictSummary,
-    summary="Resolve or dismiss a conflict (admins only)",
+    response_model=ConflictDetail,
+    summary="Decide a contradiction; both claims and all evidence are preserved",
 )
 def resolve_conflict(
     project_id: uuid.UUID,
     conflict_id: uuid.UUID,
-    payload: ConflictResolveRequest,
+    payload: ConflictResolutionRequest,
     user: CurrentUser,
     db: DbSession,
-) -> ConflictSummary:
+) -> ConflictDetail:
     resolve_project_access(
         db, project_id=project_id, user=user, required_role=WorkspaceRole.ADMIN
     )
     service = MemoryService(db)
     conflict = service.get_conflict(project_id, conflict_id)
-    service.resolve_conflict(
+    ConflictCentreService(db).resolve(
         conflict,
         user=user,
-        action=payload.action,
+        resolution=payload.resolution,
         note=payload.note,
         chosen_claim_id=payload.chosen_claim_id,
     )
-    return service.conflict_summary(conflict)
+    return service.conflict_detail(conflict)
 
 
 # ---------------------------------------------------------------------------
-# Open questions, uncertainty and handover
+# Open questions and uncertainty
 # ---------------------------------------------------------------------------
 @router.get(
     "/{project_id}/questions",
@@ -346,41 +636,6 @@ def get_uncertainty(
         db, project_id=project_id, user=user, required_role=WorkspaceRole.VIEWER
     )
     return MemoryService(db).uncertainty_centre(project_id)
-
-
-@router.post(
-    "/{project_id}/handover/generate",
-    response_model=HandoverRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Generate a handover from approved claims only",
-)
-def generate_handover(
-    project_id: uuid.UUID,
-    user: CurrentUser,
-    db: DbSession,
-    provider: ProviderDep,
-) -> HandoverRead:
-    project, _ = resolve_project_access(
-        db, project_id=project_id, user=user, required_role=WorkspaceRole.MEMBER
-    )
-    _require_provider(provider)
-    document = MemoryService(db).generate_handover(project, user=user, provider=provider)
-    return HandoverRead.model_validate(document)
-
-
-@router.get(
-    "/{project_id}/handover",
-    response_model=HandoverRead,
-    summary="Get the most recent generated handover",
-)
-def get_handover(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> HandoverRead:
-    resolve_project_access(
-        db, project_id=project_id, user=user, required_role=WorkspaceRole.VIEWER
-    )
-    document = MemoryService(db).latest_handover(project_id)
-    if document is None:
-        raise NotFoundError("No handover has been generated for this project yet.")
-    return HandoverRead.model_validate(document)
 
 
 __all__ = ["router", "get_llm_provider"]

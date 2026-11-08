@@ -24,12 +24,22 @@ export const queryKeys = {
     ["projects", projectId, "memory", "claims", params ?? {}] as const,
   claim: (projectId: string, claimId: string) =>
     ["projects", projectId, "memory", "claims", claimId] as const,
+  reviewQueue: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "memory", "review-queue", params ?? {}] as const,
   conflicts: (projectId: string, params?: Record<string, unknown>) =>
     ["projects", projectId, "memory", "conflicts", params ?? {}] as const,
+  conflict: (projectId: string, conflictId: string) =>
+    ["projects", projectId, "memory", "conflicts", conflictId] as const,
   questions: (projectId: string, params?: Record<string, unknown>) =>
     ["projects", projectId, "memory", "questions", params ?? {}] as const,
   uncertainty: (projectId: string) => ["projects", projectId, "memory", "uncertainty"] as const,
-  handover: (projectId: string) => ["projects", projectId, "handover"] as const,
+  handovers: (projectId: string) => ["projects", projectId, "handovers"] as const,
+  handover: (projectId: string, handoverId: string) =>
+    ["projects", projectId, "handovers", handoverId] as const,
+  handoverVersions: (projectId: string, handoverId: string) =>
+    ["projects", projectId, "handovers", handoverId, "versions"] as const,
+  audit: (projectId: string, params?: Record<string, unknown>) =>
+    ["projects", projectId, "audit", params ?? {}] as const,
 
   githubStatus: ["github", "status"] as const,
   githubBoundary: ["github", "boundary"] as const,

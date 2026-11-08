@@ -33,10 +33,10 @@ class ClaimHistory(Base):
     # e.g. "extracted" | "verified" | "reviewed" | "conflict_flagged" | "deduped"
     action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     from_status: Mapped[ClaimStatus | None] = mapped_column(
-        sa_enum(ClaimStatus, "claim_status", length=16), nullable=True
+        sa_enum(ClaimStatus, "claim_status", length=24), nullable=True
     )
     to_status: Mapped[ClaimStatus | None] = mapped_column(
-        sa_enum(ClaimStatus, "claim_status", length=16), nullable=True
+        sa_enum(ClaimStatus, "claim_status", length=24), nullable=True
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     meta: Mapped[JsonObject] = mapped_column("metadata", nullable=False, default=dict)

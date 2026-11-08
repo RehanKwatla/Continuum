@@ -6,8 +6,10 @@ const TABS = [
   { id: "overview", label: "Overview", to: (id: string) => `/projects/${id}` },
   { id: "sources", label: "Sources", to: (id: string) => `/projects/${id}/sources` },
   { id: "memory", label: "Memory", to: (id: string) => `/projects/${id}/memory` },
+  { id: "review", label: "Review queue", to: (id: string) => `/projects/${id}/memory/review` },
   { id: "timeline", label: "Timeline", to: (id: string) => `/projects/${id}/memory/timeline` },
   { id: "handover", label: "Handover", to: (id: string) => `/projects/${id}/handover` },
+  { id: "audit", label: "Audit", to: (id: string) => `/projects/${id}/audit` },
 ] as const;
 
 function isTabActive(id: string, projectId: string, pathname: string): boolean {
@@ -15,10 +17,12 @@ function isTabActive(id: string, projectId: string, pathname: string): boolean {
   if (id === "overview") return pathname === base;
   if (id === "sources") return pathname.startsWith(`${base}/sources`);
   if (id === "memory") {
-    return pathname.startsWith(`${base}/memory`) && !pathname.startsWith(`${base}/memory/timeline`);
+    return pathname.startsWith(`${base}/memory`) && !pathname.startsWith(`${base}/memory/timeline`) && !pathname.startsWith(`${base}/memory/review`);
   }
+  if (id === "review") return pathname.startsWith(`${base}/memory/review`);
   if (id === "timeline") return pathname.startsWith(`${base}/memory/timeline`);
   if (id === "handover") return pathname.startsWith(`${base}/handover`);
+  if (id === "audit") return pathname.startsWith(`${base}/audit`);
   return false;
 }
 

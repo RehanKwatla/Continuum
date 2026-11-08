@@ -1,34 +1,72 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  Archive,
   ArrowLeft,
   BadgeCheck,
+  CheckCircle2,
   CircleDashed,
-  FileCheck2,
-  HelpCircle,
+  FileDown,
+  FileText,
+  History,
   Loader2,
+  Lock,
+  Pencil,
+  Plus,
   RefreshCw,
+  Save,
   ScrollText,
+  Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   TriangleAlert,
+  Undo2,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import { EmptyState, ErrorState } from "@/components/common/States";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
+import { EmptyState, ErrorState } from "@/components/common/States";
+import { Tooltip } from "@/components/common/Tooltip";
 import { useProject } from "@/hooks/use-projects";
-import { useClaims, useGenerateHandover, useHandover, useQuestions } from "@/hooks/use-memory";
-import { claimTypeMeta } from "@/lib/intelligence-meta";
-import { formatDateTime } from "@/lib/format";
+import {
+  useClaims,
+  useGenerateHandover,
+  useHandover,
+  useHandoverLifecycle,
+  useHandovers,
+  useHandoverVersions,
+  useUpdateHandover,
+} from "@/hooks/use-memory";
+import { HANDOVER_STATUS_META, STATEMENT_TYPE_META, claimTypeMeta } from "@/lib/intelligence-meta";
+import { formatDateTime, pluralise } from "@/lib/format";
 import { hasAtLeast } from "@/lib/roles";
+import { cn } from "@/lib/utils";
 import { ApiClientError, toErrorMessage } from "@/services/api";
-import type { ClaimSummary, HandoverRead, HandoverSectionRead } from "@/types";
+import { downloadHandover, type HandoverExportFormat } from "@/services/memory";
+import type {
+  ClaimSummary,
+  Handover,
+  HandoverStatement,
+  HandoverUpdateInput,
+  HandoverVersion,
+  StatementType,
+} from "@/types";
 
-function LinkedClaimChip({
+// ---------------------------------------------------------------------------
+// Read-only rendering
+// ---------------------------------------------------------------------------
+function ClaimRefChip({
   projectId,
   claimId,
   claim,
@@ -43,101 +81,131 @@ function LinkedClaimChip({
     <Link
       to={`/projects/${projectId}/memory/claims/${claimId}`}
       className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-card/50 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-      title={claim ? claim.text : "Open the approved claim"}
+      title={claim ? claim.text : "Open the referenced claim"}
     >
       <Icon className="h-3 w-3 shrink-0" />
-      <span className="truncate">{claim ? claim.text : "Approved claim"}</span>
+      <span className="truncate">{claim ? claim.text : `claim ${claimId.slice(0, 8)}`}</span>
     </Link>
   );
 }
 
-function SectionBlock({
+function StatementTypeBadge({ type }: { type: StatementType }) {
+  const meta = STATEMENT_TYPE_META[type];
+  return (
+    <Tooltip label={meta.hint}>
+      <Badge variant={meta.tone}>{meta.label}</Badge>
+    </Tooltip>
+  );
+}
+
+function StatementRow({
   projectId,
-  section,
+  statement,
   claimMap,
 }: {
   projectId: string;
-  section: HandoverSectionRead;
+  statement: HandoverStatement;
   claimMap: Map<string, ClaimSummary>;
 }) {
-  const advisory = section.key === "next_actions";
-  const hasContent = section.statements.length > 0;
-
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-xs font-medium text-muted-foreground">
-          {section.title}
-        </CardTitle>
-        {advisory ? (
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Advisory
-          </span>
+    <li className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <StatementTypeBadge type={statement.statement_type} />
+        {statement.reviewer_edited ? <Badge variant="info">Reviewer edited</Badge> : null}
+        {statement.unsupported ? (
+          <Tooltip label="This statement is not backed by an approved claim and cannot enter an approved handover.">
+            <Badge variant="danger" className="gap-1">
+              <TriangleAlert className="h-3 w-3" />
+              Not evidence-backed
+            </Badge>
+          </Tooltip>
         ) : null}
+      </div>
+      <p className="text-sm leading-relaxed text-foreground">{statement.text}</p>
+      {statement.original_text && statement.original_text !== statement.text ? (
+        <p className="text-[11px] italic leading-relaxed text-muted-foreground">
+          Original: {statement.original_text}
+        </p>
+      ) : null}
+      {statement.claim_ids.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {statement.claim_ids.map((claimId) => (
+            <ClaimRefChip
+              key={claimId}
+              projectId={projectId}
+              claimId={claimId}
+              claim={claimMap.get(claimId)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function ValidationPanel({ version }: { version: HandoverVersion }) {
+  if (version.validation_errors.length === 0) return null;
+  return (
+    <Card className="border-dashed border-status-danger/40">
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <TriangleAlert className="h-3.5 w-3.5 text-status-danger" />
+          Output validator — rejected or unresolved statements
+        </CardTitle>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {version.validation_errors.length}
+        </span>
       </CardHeader>
-      <CardContent>
-        {hasContent ? (
-          <ul className="space-y-3">
-            {section.statements.map((statement, index) => (
-              <li key={index} className="space-y-1.5">
-                <p className="text-sm leading-relaxed text-foreground">{statement.text}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {statement.claim_ids.map((claimId) => (
-                    <LinkedClaimChip
-                      key={claimId}
-                      projectId={projectId}
-                      claimId={claimId}
-                      claim={claimMap.get(claimId)}
-                    />
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            No approved claim covers this section, so nothing was written for it.
-          </p>
-        )}
+      <CardContent className="space-y-2">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          The Handover Writer never invents references. Statements it could not tie to an approved
+          claim were removed and recorded here. This version cannot be approved until every factual
+          statement is backed by an approved claim.
+        </p>
+        {version.validation_errors.map((error, index) => (
+          <div
+            key={index}
+            className="rounded-md border border-border/70 bg-card/40 p-2.5 text-[11px] leading-relaxed text-muted-foreground"
+          >
+            <span className="font-mono uppercase tracking-wider">
+              {String(error.code ?? "issue")}
+            </span>
+            {error.section ? <span> · {String(error.section)}</span> : null}
+            {error.message ? <p className="mt-1 text-foreground/90">{String(error.message)}</p> : null}
+          </div>
+        ))}
       </CardContent>
     </Card>
   );
 }
 
-function HandoverDocument({ projectId, document }: { projectId: string; document: HandoverRead }) {
-  const claims = useClaims(projectId, { status: "Verified", page_size: 100 });
-  const questions = useQuestions(projectId, { status: "open", page_size: 100 });
-
-  const claimMap = new Map<string, ClaimSummary>(
-    (claims.data?.items ?? []).map((claim) => [claim.id, claim]),
-  );
-  const rejected = document.validation_errors ?? [];
-
+function VersionDocument({
+  projectId,
+  version,
+  claimMap,
+}: {
+  projectId: string;
+  version: HandoverVersion;
+  claimMap: Map<string, ClaimSummary>;
+}) {
   return (
     <div className="space-y-4">
       <div className="panel flex flex-col gap-2 border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5" />
-          Written from {document.claim_ids.length} approved claim
-          {document.claim_ids.length === 1 ? "" : "s"} only. Unlinked sentences are deleted by the
-          output validator.
+          Written from {pluralise(version.included_claim_ids.length, "approved claim")} only.
+          Unlinked sentences are deleted by the output validator.
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          <span>Generated {formatDateTime(document.created_at)}</span>
-          {document.model_name ? <span className="font-mono">model {document.model_name}</span> : null}
+          <span>v{version.version_number}</span>
+          <span>Generated {formatDateTime(version.created_at)}</span>
+          {version.model_name ? (
+            <span className="font-mono">model {version.model_name}</span>
+          ) : null}
         </div>
       </div>
 
-      {document.status === "failed" ? (
-        <div className="panel border border-status-danger/35 bg-status-danger/[0.06] p-4">
-          <p className="flex items-center gap-2 text-xs text-muted-foreground">
-            <TriangleAlert className="h-3.5 w-3.5 text-status-danger" />
-            The Handover Writer could not complete. The sections below may be empty.
-          </p>
-        </div>
-      ) : null}
-
-      {document.claim_ids.length === 0 ? (
+      {version.included_claim_ids.length === 0 ? (
         <div className="panel border border-border p-4">
           <p className="text-xs leading-relaxed text-muted-foreground">
             No claims have been approved for this project yet, so the handover contains no
@@ -147,111 +215,581 @@ function HandoverDocument({ projectId, document }: { projectId: string; document
         </div>
       ) : null}
 
-      {document.summary ? (
+      {version.summary ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-xs font-medium text-muted-foreground">Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm leading-relaxed text-foreground">{document.summary}</p>
+            <p className="text-sm leading-relaxed text-foreground">{version.summary}</p>
           </CardContent>
         </Card>
       ) : null}
 
       <div className="space-y-3">
-        {document.sections.map((section) => (
-          <SectionBlock
-            key={section.key}
-            projectId={projectId}
-            section={section}
-            claimMap={claimMap}
-          />
-        ))}
+        {version.sections
+          .filter((section) => !section.removed)
+          .map((section) => (
+            <Card key={section.key}>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {section.title}
+                </CardTitle>
+                {section.not_established ? (
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Not established
+                  </span>
+                ) : null}
+              </CardHeader>
+              <CardContent>
+                {section.statements.length > 0 ? (
+                  <ul className="space-y-3">
+                    {section.statements.map((statement) => (
+                      <StatementRow
+                        key={statement.statement_id}
+                        projectId={projectId}
+                        statement={statement}
+                        claimMap={claimMap}
+                      />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {section.placeholder ??
+                      "No approved claim covers this section, so nothing was written for it."}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ))}
       </div>
 
-      {rejected.length > 0 ? (
+      {version.reviewer_notes.length > 0 ? (
         <Card className="border-dashed">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Statements rejected by the output validator
-            </CardTitle>
-            <span className="text-[11px] tabular-nums text-muted-foreground">{rejected.length}</span>
+          <CardHeader>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Reviewer notes</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {rejected.map((error, index) => (
+            {version.reviewer_notes.map((note) => (
               <div
-                key={index}
-                className="rounded-md border border-border/70 bg-card/40 p-2.5 text-[11px] leading-relaxed text-muted-foreground"
+                key={note.id}
+                className="rounded-md border border-border/70 bg-card/40 p-2.5 text-xs leading-relaxed text-foreground"
               >
-                <span className="font-mono uppercase tracking-wider">
-                  {String(error.code ?? "rejected")}
+                {note.text}
+                <span className="ml-2 text-[11px] text-muted-foreground">
+                  {formatDateTime(note.created_at)}
                 </span>
-                {error.section ? <span> · {String(error.section)}</span> : null}
-                {error.text ? <p className="mt-1 text-foreground/90">{String(error.text)}</p> : null}
               </div>
             ))}
           </CardContent>
         </Card>
       ) : null}
 
-      <Card className="border-dashed">
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
-            Open questions — kept separate from the handover
-          </CardTitle>
-          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {questions.isLoading ? (
-            <Skeleton className="h-12 w-full" />
-          ) : questions.data && questions.data.items.length > 0 ? (
-            <ul className="space-y-2">
-              {questions.data.items.map((question) => (
-                <li
-                  key={question.id}
-                  className="rounded-md border border-border/70 bg-card/40 p-2.5"
-                >
-                  <p className="text-xs leading-relaxed text-foreground">{question.question}</p>
-                  {question.context ? (
-                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                      {question.context}
-                    </p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              No open questions were raised for this project.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <ValidationPanel version={version} />
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Editor
+// ---------------------------------------------------------------------------
+interface DraftStatement {
+  statement_id: string | null;
+  text: string;
+  /** The text as loaded, so an unchanged statement is never flagged as edited. */
+  baseline: string;
+  original_text: string | null;
+  claim_ids: string[];
+  statement_type: StatementType;
+  unsupported: boolean;
+  removed: boolean;
+}
+
+interface DraftSection {
+  key: string;
+  title: string;
+  statements: DraftStatement[];
+  removed: boolean;
+}
+
+interface Draft {
+  title: string;
+  summary: string;
+  sections: DraftSection[];
+  notes: string[];
+  note: string;
+}
+
+function buildDraft(version: HandoverVersion, title: string): Draft {
+  return {
+    title,
+    summary: version.summary ?? "",
+    sections: version.sections.map((section) => ({
+      key: section.key,
+      title: section.title,
+      removed: section.removed,
+      statements: section.statements.map((statement) => ({
+        statement_id: statement.statement_id,
+        text: statement.text,
+        baseline: statement.text,
+        original_text: statement.original_text,
+        claim_ids: statement.claim_ids,
+        statement_type: statement.statement_type,
+        unsupported: statement.unsupported,
+        removed: false,
+      })),
+    })),
+    notes: [],
+    note: "",
+  };
+}
+
+function SectionEditor({
+  section,
+  onChange,
+}: {
+  section: DraftSection;
+  onChange: (next: DraftSection) => void;
+}) {
+  const updateStatement = (index: number, next: DraftStatement) => {
+    const statements = section.statements.map((item, position) =>
+      position === index ? next : item,
+    );
+    onChange({ ...section, statements });
+  };
+
+  const setText = (index: number, text: string) => {
+    const current = section.statements[index];
+    // Record the original the first time the reviewer rewrites generated text.
+    const original_text =
+      text === current.baseline
+        ? current.original_text
+        : (current.original_text ?? current.baseline);
+    updateStatement(index, { ...current, text, original_text });
+  };
+
+  return (
+    <Card className={cn(section.removed && "opacity-60")}>
+      <CardHeader className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Input
+            value={section.title}
+            onChange={(event) => onChange({ ...section, title: event.target.value })}
+            aria-label="Section title"
+            className="h-8 max-w-md text-sm"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant={section.removed ? "default" : "ghost"}
+            className="ml-auto"
+            onClick={() => onChange({ ...section, removed: !section.removed })}
+          >
+            {section.removed ? <Undo2 className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {section.removed ? "Keep section" : "Remove section"}
+          </Button>
+        </div>
+        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {section.key}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {section.statements.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground">
+            No approved claim covers this section. A section with no content is exported as a
+            “not established” placeholder rather than invented prose.
+          </p>
+        ) : null}
+        {section.statements.map((statement, index) => (
+          <div
+            key={statement.statement_id ?? index}
+            className={cn(
+              "space-y-2 rounded-md border border-border/70 bg-card/40 p-3",
+              statement.removed && "opacity-50",
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <StatementTypeBadge type={statement.statement_type} />
+              {statement.claim_ids.length > 0 ? (
+                <Badge variant="secondary">
+                  {pluralise(statement.claim_ids.length, "claim")}
+                </Badge>
+              ) : (
+                <Badge variant="warn">No claim reference</Badge>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="ml-auto h-7"
+                onClick={() => updateStatement(index, { ...statement, removed: !statement.removed })}
+              >
+                {statement.removed ? (
+                  <Undo2 className="h-3.5 w-3.5" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                {statement.removed ? "Restore" : "Remove"}
+              </Button>
+            </div>
+            <Textarea
+              value={statement.text}
+              onChange={(event) => setText(index, event.target.value)}
+              rows={2}
+              disabled={statement.removed}
+              aria-label="Statement text"
+            />
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              Claim references are re-resolved by the server against the approved set — the browser
+              can never widen what counts as evidence.
+            </p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function HandoverEditor({
+  version,
+  title,
+  projectId,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  version: HandoverVersion;
+  title: string;
+  projectId: string;
+  onSave: (input: HandoverUpdateInput) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const [draft, setDraft] = useState<Draft>(() => buildDraft(version, title));
+  const [noteText, setNoteText] = useState("");
+
+  // Reset when a different version is loaded.
+  useEffect(() => {
+    setDraft(buildDraft(version, title));
+    setNoteText("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version.id]);
+
+  const updateSection = (index: number, next: DraftSection) => {
+    setDraft((current) => ({
+      ...current,
+      sections: current.sections.map((section, position) => (position === index ? next : section)),
+    }));
+  };
+
+  const addNote = () => {
+    const text = noteText.trim();
+    if (text.length < 2) return;
+    setDraft((current) => ({ ...current, notes: [...current.notes, text] }));
+    setNoteText("");
+  };
+
+  const handleSave = () => {
+    const sections = draft.sections.map((section) => ({
+      key: section.key,
+      title: section.title.trim() || null,
+      removed: section.removed,
+      statements: section.statements
+        .filter((statement) => !statement.removed && statement.text.trim())
+        .map((statement) => ({
+          statement_id: statement.statement_id,
+          text: statement.text.trim(),
+          claim_ids: statement.claim_ids,
+          original_text: statement.original_text,
+        })),
+    }));
+    onSave({
+      title: draft.title.trim() || null,
+      summary: draft.summary.trim() || null,
+      sections,
+      reviewer_notes: draft.notes,
+      note: draft.note.trim() || null,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="panel flex flex-col gap-3 border border-primary/30 bg-primary/[0.04] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+          <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Saving writes a new immutable version. The current version is never overwritten, and a
+          published version is never replaced.
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save as new version
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="handover-title">Document title</Label>
+          <Input
+            id="handover-title"
+            value={draft.title}
+            onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="handover-note">Why are you editing? (recorded in the audit trail)</Label>
+          <Input
+            id="handover-note"
+            value={draft.note}
+            placeholder="e.g. clarified the deployment owner"
+            onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="handover-summary">Summary</Label>
+        <Textarea
+          id="handover-summary"
+          value={draft.summary}
+          rows={3}
+          placeholder="A summary is only kept when it can be traced to an approved claim."
+          onChange={(event) => setDraft((current) => ({ ...current, summary: event.target.value }))}
+        />
+      </div>
+
+      <div className="space-y-3">
+        {draft.sections.map((section, index) => (
+          <SectionEditor
+            key={section.key}
+            section={section}
+            onChange={(next) => updateSection(index, next)}
+          />
+        ))}
+      </div>
+
+      <Card className="border-dashed">
+        <CardHeader>
+          <CardTitle className="text-xs font-medium text-muted-foreground">
+            Reviewer notes — appended to this version
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            A reviewer note is authored by you and is never presented as an established project
+            fact.
+          </p>
+          {draft.notes.length > 0 ? (
+            <ul className="space-y-1.5">
+              {draft.notes.map((text, index) => (
+                <li
+                  key={index}
+                  className="rounded-md border border-border/70 bg-card/40 p-2.5 text-xs text-foreground"
+                >
+                  {text}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <Input
+              value={noteText}
+              onChange={(event) => setNoteText(event.target.value)}
+              placeholder="Add a reviewer note"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addNote();
+                }
+              }}
+            />
+            <Button type="button" size="sm" variant="outline" onClick={addNote}>
+              <Plus className="h-3.5 w-3.5" />
+              Add
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <p className="text-[11px] text-muted-foreground">
+        Project {projectId.slice(0, 8)} · editing version {version.version_number}
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Version history
+// ---------------------------------------------------------------------------
+function VersionHistory({
+  projectId,
+  handover,
+  versions,
+  claimMap,
+}: {
+  projectId: string;
+  handover: Handover;
+  versions: HandoverVersion[];
+  claimMap: Map<string, ClaimSummary>;
+}) {
+  const { toast } = useToast();
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const doExport = async (version: HandoverVersion, format: HandoverExportFormat) => {
+    try {
+      await downloadHandover(
+        projectId,
+        handover.id,
+        format,
+        `handover-v${version.version_number}.${format}`,
+        version.version_number,
+      );
+      toast({
+        title: "Export started",
+        description: `v${version.version_number} is downloading as .${format}. Every download is audited.`,
+        variant: "success",
+      });
+    } catch (caught) {
+      toast({
+        title: "Could not export the handover",
+        description: toErrorMessage(caught),
+        variant: "error",
+      });
+    }
+  };
+
+  if (versions.length === 0) {
+    return (
+      <EmptyState
+        icon={<History className="h-4 w-4" />}
+        title="No versions yet"
+        description="Generating the handover creates its first version."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        Every version is immutable. Editing a handover appends a new version rather than changing an
+        existing one; a published version is never overwritten.
+      </p>
+      {versions.map((version) => {
+        const meta = HANDOVER_STATUS_META[version.status];
+        const open = openId === version.id;
+        return (
+          <Card key={version.id}>
+            <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="font-mono">
+                  v{version.version_number}
+                </Badge>
+                <Badge variant={meta.tone}>{meta.label}</Badge>
+                {version.version_number === handover.current_version ? (
+                  <Badge variant="secondary">Current</Badge>
+                ) : null}
+                <span className="text-[11px] text-muted-foreground">
+                  {formatDateTime(version.created_at)}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {pluralise(version.included_claim_ids.length, "claim")}
+                </span>
+                {version.validation_errors.length > 0 ? (
+                  <Badge variant="danger" className="gap-1">
+                    <TriangleAlert className="h-3 w-3" />
+                    {version.validation_errors.length} issue
+                    {version.validation_errors.length === 1 ? "" : "s"}
+                  </Badge>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setOpenId(open ? null : version.id)}
+                >
+                  {open ? "Hide" : "Preview"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => void doExport(version, "md")}>
+                  <FileText className="h-3.5 w-3.5" />
+                  MD
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => void doExport(version, "pdf")}>
+                  <FileDown className="h-3.5 w-3.5" />
+                  PDF
+                </Button>
+              </div>
+            </CardHeader>
+            {open ? (
+              <CardContent>
+                <VersionDocument projectId={projectId} version={version} claimMap={claimMap} />
+              </CardContent>
+            ) : null}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 export default function HandoverPreview() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
-  const handover = useHandover(projectId);
-  const generate = useGenerateHandover(projectId ?? "");
+  const handovers = useHandovers(projectId);
   const { toast } = useToast();
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+
+  // Default to the most recent handover once the list loads.
+  useEffect(() => {
+    if (selectedId || !handovers.data) return;
+    const first = handovers.data.items[0];
+    if (first) setSelectedId(first.id);
+  }, [handovers.data, selectedId]);
+
+  const handover = useHandover(projectId, selectedId ?? undefined);
+  const versions = useHandoverVersions(projectId, selectedId ?? undefined);
+
+  const approvedClaims = useClaims(projectId, { status: "Verified", page_size: 100 });
+  const claimMap = useMemo(
+    () => new Map<string, ClaimSummary>((approvedClaims.data?.items ?? []).map((c) => [c.id, c])),
+    [approvedClaims.data],
+  );
+
+  const generate = useGenerateHandover(projectId ?? "");
+  const update = useUpdateHandover(projectId ?? "", selectedId ?? "");
+  const lifecycle = useHandoverLifecycle(projectId ?? "", selectedId ?? "");
+
+  if (!projectId) return null;
 
   const role = project.data?.workspace?.role ?? null;
   const canGenerate = hasAtLeast(role, "member");
+  const canReview = hasAtLeast(role, "admin");
+
+  const document = handover.data;
+  const current = document?.current ?? null;
+  const currentStatus = current?.status ?? document?.status ?? "Draft";
+  const publishedVersion = versions.data?.find((version) => version.status === "Published") ?? null;
 
   const handleGenerate = async () => {
     try {
-      const document = await generate.mutateAsync();
+      const created = await generate.mutateAsync();
+      setSelectedId(created.id);
       toast({
         title: "Handover generated",
-        description: `${document.claim_ids.length} approved claim(s) referenced.`,
-        variant: document.status === "failed" ? "error" : "success",
+        description: `${pluralise(created.current?.included_claim_ids.length ?? 0, "approved claim")} referenced.`,
+        variant: "success",
       });
     } catch (caught) {
-      const notConfigured =
-        caught instanceof ApiClientError && caught.code === "ai_not_configured";
+      const notConfigured = caught instanceof ApiClientError && caught.code === "ai_not_configured";
       toast({
         title: notConfigured ? "Intelligence layer not configured" : "Could not generate handover",
         description: toErrorMessage(caught),
@@ -260,33 +798,83 @@ export default function HandoverPreview() {
     }
   };
 
-  if (!projectId) return null;
+  const runLifecycle = async (
+    label: string,
+    fn: () => Promise<unknown>,
+    success: string,
+  ) => {
+    try {
+      await fn();
+      toast({ title: label, description: success, variant: "success" });
+    } catch (caught) {
+      toast({ title: label, description: toErrorMessage(caught), variant: "error" });
+    }
+  };
+
+  const handleSave = async (input: HandoverUpdateInput) => {
+    try {
+      await update.mutateAsync(input);
+      setEditing(false);
+      toast({
+        title: "New version saved",
+        description: "Your edit was stored as a new draft version for review.",
+        variant: "success",
+      });
+    } catch (caught) {
+      toast({
+        title: "Could not save the edit",
+        description: toErrorMessage(caught),
+        variant: "error",
+      });
+    }
+  };
+
+  const doExportCurrent = async (format: HandoverExportFormat) => {
+    if (!document || !current) return;
+    try {
+      await downloadHandover(
+        projectId,
+        document.id,
+        format,
+        `handover-v${current.version_number}.${format}`,
+        current.version_number,
+      );
+      toast({
+        title: "Export started",
+        description: `v${current.version_number} is downloading as .${format}.`,
+        variant: "success",
+      });
+    } catch (caught) {
+      toast({
+        title: "Could not export the handover",
+        description: toErrorMessage(caught),
+        variant: "error",
+      });
+    }
+  };
+
+  const isLoading = handovers.isLoading || (selectedId && handover.isLoading);
+  const hasNone = !handovers.isLoading && (handovers.data?.items.length ?? 0) === 0;
 
   const generateButton = (
-    <Button
-      size="sm"
-      onClick={() => void handleGenerate()}
-      disabled={!canGenerate || generate.isPending}
-    >
+    <Button size="sm" onClick={() => void handleGenerate()} disabled={!canGenerate || generate.isPending}>
       {generate.isPending ? (
         <Loader2 className="h-4 w-4 animate-spin" />
-      ) : handover.data ? (
+      ) : document ? (
         <RefreshCw className="h-4 w-4" />
       ) : (
         <Sparkles className="h-4 w-4" />
       )}
-      {handover.data ? "Regenerate handover" : "Generate handover"}
+      {document ? "Regenerate" : "Generate handover"}
     </Button>
   );
-
-  const missing = handover.error instanceof ApiClientError && handover.error.isNotFound;
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Handover"
-        title={project.data?.name ?? "Handover"}
-        description="A structured handover assembled from approved claims only. Every statement links back to the claim it came from."
+        title={document?.title ?? project.data?.name ?? "Handover"}
+        description="A versioned handover assembled from approved claims only. Every statement links back to the claim it came from, and only a human reviewer can approve it."
         actions={
           <>
             <Button variant="ghost" size="sm" asChild>
@@ -304,29 +892,39 @@ export default function HandoverPreview() {
 
       {!canGenerate ? (
         <p className="text-[11px] text-muted-foreground">
-          The member role is required to generate a handover.
+          The member role is required to generate a handover; the admin role is required to edit,
+          approve or publish one.
         </p>
       ) : null}
 
-      {handover.isLoading ? (
+      {handovers.isError ? (
+        <ErrorState
+          error={handovers.error}
+          title="The handovers could not be loaded"
+          onRetry={() => void handovers.refetch()}
+        />
+      ) : isLoading ? (
         <div className="space-y-3">
           <Skeleton className="h-16 w-full rounded-lg" />
           {Array.from({ length: 3 }).map((_, index) => (
             <Skeleton key={index} className="h-32 w-full rounded-lg" />
           ))}
         </div>
-      ) : missing ? (
+      ) : hasNone ? (
         <EmptyState
           icon={<ScrollText className="h-4 w-4" />}
           title="No handover generated yet"
           description="A handover is written from the claims a human has approved. Approve claims in the memory workspace, then generate the handover here."
           action={
-            <Button size="sm" variant="outline" asChild>
-              <Link to={`/projects/${projectId}/memory/claims?status=Verified`}>
-                <FileCheck2 className="h-4 w-4" />
-                Review approved claims
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/projects/${projectId}/memory/claims?status=Verified`}>
+                  <FileText className="h-4 w-4" />
+                  Review approved claims
+                </Link>
+              </Button>
+              {canGenerate ? generateButton : null}
+            </div>
           }
         />
       ) : handover.isError ? (
@@ -335,8 +933,271 @@ export default function HandoverPreview() {
           title="The handover could not be loaded"
           onRetry={() => void handover.refetch()}
         />
-      ) : handover.data ? (
-        <HandoverDocument projectId={projectId} document={handover.data} />
+      ) : document && current ? (
+        <div className="space-y-5">
+          {handovers.data && handovers.data.items.length > 1 ? (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="handover-select" className="text-[11px]">
+                Handover
+              </Label>
+              <Select
+                value={selectedId ?? ""}
+                onValueChange={(value) => {
+                  setSelectedId(value);
+                  setEditing(false);
+                }}
+              >
+                <SelectTrigger id="handover-select" className="h-8 w-72 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {handovers.data.items.map((item) => (
+                    <SelectItem key={item.id} value={item.id} className="text-xs">
+                      {item.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          {/* Status / lifecycle bar */}
+          <div className="panel flex flex-wrap items-center gap-x-4 gap-y-2 border border-border p-4">
+            <Badge variant={HANDOVER_STATUS_META[currentStatus].tone}>
+              {HANDOVER_STATUS_META[currentStatus].label}
+            </Badge>
+            <span className="text-[11px] text-muted-foreground">
+              current version <span className="font-mono">v{document.current_version}</span>
+            </span>
+            {current.approved_at ? (
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <CheckCircle2 className="h-3 w-3 text-status-ok" />
+                Approved {formatDateTime(current.approved_at)}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <CircleDashed className="h-3 w-3" />
+                Not yet approved by a reviewer
+              </span>
+            )}
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => void doExportCurrent("md")}>
+                <FileText className="h-3.5 w-3.5" />
+                Export MD
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => void doExportCurrent("pdf")}>
+                <FileDown className="h-3.5 w-3.5" />
+                Export PDF
+              </Button>
+
+              {canReview && currentStatus !== "Archived" ? (
+                editing ? null : (
+                  <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                )
+              ) : null}
+
+              {canReview && currentStatus === "Draft" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={lifecycle.submit.isPending}
+                  onClick={() =>
+                    void runLifecycle(
+                      "Submitted for review",
+                      () => lifecycle.submit.mutateAsync(),
+                      "The draft is now awaiting approval.",
+                    )
+                  }
+                >
+                  {lifecycle.submit.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                  Submit
+                </Button>
+              ) : null}
+
+              {canReview && (currentStatus === "Draft" || currentStatus === "In Review") ? (
+                <Button
+                  size="sm"
+                  disabled={lifecycle.approve.isPending}
+                  onClick={() =>
+                    void runLifecycle(
+                      "Handover approved",
+                      () => lifecycle.approve.mutateAsync(),
+                      "Approved by a human reviewer. It can now be published.",
+                    )
+                  }
+                >
+                  {lifecycle.approve.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                  )}
+                  Approve
+                </Button>
+              ) : null}
+
+              {canReview && currentStatus === "Approved" ? (
+                <Button
+                  size="sm"
+                  disabled={lifecycle.publish.isPending}
+                  onClick={() =>
+                    void runLifecycle(
+                      "Handover published",
+                      () => lifecycle.publish.mutateAsync(),
+                      "Published versions are immutable and available to the successor.",
+                    )
+                  }
+                >
+                  {lifecycle.publish.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  )}
+                  Publish
+                </Button>
+              ) : null}
+
+              {canReview && currentStatus !== "Archived" ? (
+                <Tooltip label="Archiving keeps every version and its history.">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={lifecycle.archive.isPending}
+                    onClick={() =>
+                      void runLifecycle(
+                        "Handover archived",
+                        () => lifecycle.archive.mutateAsync(),
+                        "The handover is archived; its versions are preserved.",
+                      )
+                    }
+                  >
+                    {lifecycle.archive.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Archive className="h-3.5 w-3.5" />
+                    )}
+                    Archive
+                  </Button>
+                </Tooltip>
+              ) : null}
+            </div>
+          </div>
+
+          {currentStatus === "Archived" ? (
+            <div className="panel border border-border p-4 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-2">
+                <Lock className="h-3.5 w-3.5" />
+                This handover is archived. Its published versions remain readable and exportable.
+              </span>
+            </div>
+          ) : null}
+
+          {!canReview ? (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              You have read-only access. Editing, approval and publishing are restricted to a
+              workspace owner or admin, and are verified again on the server.
+            </p>
+          ) : null}
+
+          <Tabs defaultValue="document">
+            <TabsList>
+              <TabsTrigger value="document">Document</TabsTrigger>
+              <TabsTrigger value="versions">
+                Versions
+                {versions.data ? ` (${versions.data.length})` : ""}
+              </TabsTrigger>
+              {publishedVersion ? (
+                <TabsTrigger value="successor">Successor view</TabsTrigger>
+              ) : null}
+            </TabsList>
+
+            <TabsContent value="document">
+              {editing && canReview ? (
+                <HandoverEditor
+                  version={current}
+                  title={document.title}
+                  projectId={projectId}
+                  onSave={(input) => void handleSave(input)}
+                  onCancel={() => setEditing(false)}
+                  saving={update.isPending}
+                />
+              ) : (
+                <VersionDocument projectId={projectId} version={current} claimMap={claimMap} />
+              )}
+            </TabsContent>
+
+            <TabsContent value="versions">
+              {versions.isLoading ? (
+                <Skeleton className="h-40 w-full rounded-lg" />
+              ) : (
+                <VersionHistory
+                  projectId={projectId}
+                  handover={document}
+                  versions={versions.data ?? []}
+                  claimMap={claimMap}
+                />
+              )}
+            </TabsContent>
+
+            {publishedVersion ? (
+              <TabsContent value="successor">
+                <div className="space-y-4">
+                  <div className="panel flex items-center gap-2 border border-status-ok/35 bg-status-ok/[0.06] p-4 text-xs text-muted-foreground">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-status-ok" />
+                    This is the published handover a successor reads. It is a frozen, human-approved
+                    record — it is not regenerated from model output on each view.
+                  </div>
+                  <VersionDocument
+                    projectId={projectId}
+                    version={publishedVersion}
+                    claimMap={claimMap}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void downloadHandover(
+                          projectId,
+                          document.id,
+                          "md",
+                          `handover-published-v${publishedVersion.version_number}.md`,
+                          publishedVersion.version_number,
+                        )
+                      }
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Download Markdown
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void downloadHandover(
+                          projectId,
+                          document.id,
+                          "pdf",
+                          `handover-published-v${publishedVersion.version_number}.pdf`,
+                          publishedVersion.version_number,
+                        )
+                      }
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      Download PDF
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+            ) : null}
+          </Tabs>
+        </div>
       ) : (
         <EmptyState
           icon={<CircleDashed className="h-4 w-4" />}
