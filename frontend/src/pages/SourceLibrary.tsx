@@ -32,7 +32,9 @@ import {
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { PageHeader, TableSkeleton } from "@/components/common/PageHeader";
+import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { ProcessingStatusBadge, SourceTypeBadge } from "@/components/common/StatusBadge";
+import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import { useProject } from "@/hooks/use-projects";
 import { useDeleteSource, useSources } from "@/hooks/use-sources";
@@ -140,6 +142,8 @@ export default function SourceLibrary() {
           </>
         }
       />
+
+      {projectId ? <ProjectWorkspaceNav projectId={projectId} /> : null}
 
       {Object.keys(statusCounts).length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
@@ -301,16 +305,18 @@ export default function SourceLibrary() {
                     {formatRelative(source.created_at_source ?? source.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Remove ${source.source_name}`}
-                      onClick={() =>
-                        setPendingDelete({ id: source.id, name: source.source_name })
-                      }
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <Tooltip label="Remove source">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Remove ${source.source_name}`}
+                        onClick={() =>
+                          setPendingDelete({ id: source.id, name: source.source_name })
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}

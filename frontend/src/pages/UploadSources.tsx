@@ -19,7 +19,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/common/PageHeader";
+import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { ProcessingStatusBadge } from "@/components/common/StatusBadge";
+import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import { useProject } from "@/hooks/use-projects";
 import { useUploadSources } from "@/hooks/use-sources";
@@ -144,6 +146,8 @@ export default function UploadSources() {
         }
       />
 
+      {projectId ? <ProjectWorkspaceNav projectId={projectId} /> : null}
+
       {project.isError ? (
         <Alert variant="destructive" title="Project unavailable">
           {toErrorMessage(project.error)}
@@ -167,7 +171,7 @@ export default function UploadSources() {
                 className={
                   dragging
                     ? "flex flex-col items-center justify-center rounded-lg border border-dashed border-primary/60 bg-primary/[0.06] px-6 py-12 text-center transition-colors"
-                    : "flex flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-card/40 px-6 py-12 text-center transition-colors"
+                    : "flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/40 px-6 py-12 text-center transition-colors hover:border-primary/50 hover:bg-primary/[0.04]"
                 }
               >
                 <UploadCloud className="h-5 w-5 text-muted-foreground" />
@@ -232,22 +236,24 @@ export default function UploadSources() {
                             {formatBytes(file.size)}
                           </p>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Remove ${file.name}`}
-                          disabled={busy}
-                          onClick={() =>
-                            setFiles((current) =>
-                              current.filter(
-                                (item) => !(item.name === file.name && item.size === file.size),
-                              ),
-                            )
-                          }
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
+                        <Tooltip label="Remove file">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Remove ${file.name}`}
+                            disabled={busy}
+                            onClick={() =>
+                              setFiles((current) =>
+                                current.filter(
+                                  (item) => !(item.name === file.name && item.size === file.size),
+                                ),
+                              )
+                            }
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </Tooltip>
                       </li>
                     ))}
                   </ul>

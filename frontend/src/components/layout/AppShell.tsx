@@ -1,59 +1,205 @@
 import * as React from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
-import { Activity, FolderKanban, LayoutDashboard, Plug, X } from "lucide-react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  Brain,
+  ChevronsUpDown,
+  FolderKanban,
+  LayoutDashboard,
+  LogOut,
+  Plug,
+  ScrollText,
+  Settings,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Topbar } from "@/components/layout/Topbar";
+import { Tooltip } from "@/components/common/Tooltip";
+import { WorkspaceCreateDialog } from "@/components/common/WorkspaceCreateDialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { useWorkspaces } from "@/hooks/use-workspaces";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { to: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
+  { to: "/dashboard", label: "Overview", Icon: LayoutDashboard },
   { to: "/projects", label: "Projects", Icon: FolderKanban },
   { to: "/sources", label: "Sources", Icon: Plug },
+  { to: "/memory", label: "Knowledge Memory", Icon: Brain, soon: true },
+  { to: "/handovers", label: "Handovers", Icon: ScrollText, soon: true },
+  { to: "/settings", label: "Settings", Icon: Settings },
 ] as const;
 
-function BrandMark() {
+const WORKSPACE_KEY = "continuum.workspaceId";
+
+function Wordmark() {
   return (
-    <Link to="/dashboard" className="flex items-center gap-2.5 px-1">
-      <span className="flex h-7 w-7 items-center justify-center rounded-md border border-primary/40 bg-primary/10">
-        <Activity className="h-3.5 w-3.5 text-primary" />
-      </span>
-      <span className="flex flex-col leading-none">
-        <span className="text-sm font-semibold tracking-tight">Continuum</span>
-        <span className="mt-0.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-          Project continuity
-        </span>
-      </span>
+    <Link to="/dashboard" className="wordmark">
+      Continuum
     </Link>
+  );
+}
+
+function WorkspaceSelector() {
+  const workspaces = useWorkspaces();
+  const navigate = useNavigate();
+  const [openCreate, setOpenCreate] = React.useState(false);
+  const [selectedId, setSelectedId] = React.useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(WORKSPACE_KEY);
+  });
+
+  const items = workspaces.data ?? [];
+  const selected = items.find((item) => item.id === selectedId) ?? items[0] ?? null;
+
+  React.useEffect(() => {
+    if (selected && selected.id !== selectedId) {
+      setSelectedId(selected.id);
+      window.localStorage.setItem(WORKSPACE_KEY, selected.id);
+    }
+  }, [selected, selectedId]);
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-background/40 px-2.5 py-2 text-left transition-colors hover:border-primary/50"
+          >
+            <span className="min-w-0">
+              <span className="block text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                Workspace
+              </span>
+              <span className="mt-0.5 block truncate text-sm text-foreground">
+                {workspaces.isLoading ? "Loading…" : selected?.name ?? "No workspace"}
+              </span>
+            </span>
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+          {items.length === 0 ? (
+            <DropdownMenuItem disabled>None yet</DropdownMenuItem>
+          ) : (
+            items.map((workspace) => (
+              <DropdownMenuItem
+                key={workspace.id}
+                onSelect={() => {
+                  setSelectedId(workspace.id);
+                  window.localStorage.setItem(WORKSPACE_KEY, workspace.id);
+                  navigate(`/projects?workspace_id=${workspace.id}`);
+                }}
+              >
+                <span className="truncate">{workspace.name}</span>
+              </DropdownMenuItem>
+            ))
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setOpenCreate(true)}>New workspace</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <WorkspaceCreateDialog open={openCreate} onOpenChange={setOpenCreate} />
+    </>
   );
 }
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-0.5" aria-label="Primary">
-      {NAV_ITEMS.map(({ to, label, Icon }) => (
+      {NAV_ITEMS.map(({ to, label, Icon, ...rest }) => (
         <NavLink
           key={to}
           to={to}
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+              "flex items-center gap-2.5 rounded-md border-l-2 px-2.5 py-2 text-sm transition-colors",
               isActive
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                ? "border-primary bg-primary/10 text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
             )
           }
         >
           <Icon className="h-4 w-4" />
-          {label}
+          <span className="truncate">{label}</span>
+          {"soon" in rest && rest.soon ? (
+            <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+              Soon
+            </span>
+          ) : null}
         </NavLink>
       ))}
     </nav>
   );
 }
 
-/** Responsive application frame: persistent sidebar, sticky top bar. */
+function ProfileFooter() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = React.useState(false);
+  const label = user?.full_name ?? user?.email ?? "Account";
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+      navigate("/login", { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-border p-3">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-xs font-medium uppercase text-sand">
+          {label.slice(0, 1)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm text-foreground">{user?.full_name ?? "Continuum user"}</p>
+          <p className="truncate font-mono text-[10px] text-muted-foreground">{user?.email}</p>
+        </div>
+        <Tooltip label="Sign out">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Sign out"
+            disabled={signingOut}
+            onClick={() => void handleSignOut()}
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <>
+      <div className="flex h-16 items-center px-5">
+        <Wordmark />
+      </div>
+      <div className="flex-1 space-y-4 overflow-y-auto px-3 pb-4">
+        <WorkspaceSelector />
+        <NavItems onNavigate={onNavigate} />
+      </div>
+      <ProfileFooter />
+    </>
+  );
+}
+
+/** Responsive application frame: charcoal sidebar, lifted main canvas. */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const location = useLocation();
@@ -63,43 +209,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-      {/* Desktop sidebar */}
-      <aside className="hidden border-r border-border/70 bg-card/30 lg:flex lg:flex-col">
-        <div className="flex h-14 items-center border-b border-border/70 px-4">
-          <BrandMark />
-        </div>
-        <div className="flex-1 overflow-y-auto p-3">
-          <NavItems />
-          <div className="mt-6 rounded-lg border border-border/70 bg-card/50 p-3">
-            <p className="label-eyebrow">Pipeline</p>
-            <ol className="mt-2 space-y-1.5 text-[11px] text-muted-foreground">
-              {["Connect", "Reconstruct", "Verify", "Review", "Handover"].map((stage, index) => (
-                <li key={stage} className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "flex h-4 w-4 items-center justify-center rounded-full border text-[9px]",
-                      index <= 0
-                        ? "border-primary/50 text-primary"
-                        : "border-border text-muted-foreground/70",
-                    )}
-                  >
-                    {index + 1}
-                  </span>
-                  <span className={index <= 0 ? "text-foreground" : undefined}>{stage}</span>
-                  {index > 0 ? (
-                    <span className="ml-auto text-[9px] uppercase tracking-wider text-muted-foreground/60">
-                      Phase 3
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
+    <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      <aside className="hidden border-r border-border bg-sidebar lg:flex lg:flex-col">
+        <SidebarBody />
       </aside>
 
-      {/* Mobile drawer */}
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
@@ -107,36 +221,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
-          <div className="relative h-full w-[264px] border-r border-border bg-card p-3">
-            <div className="mb-3 flex items-center justify-between px-1">
-              <BrandMark />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setMobileOpen(false)}
-                aria-label="Close navigation"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <NavItems onNavigate={() => setMobileOpen(false)} />
+          <div className="relative flex h-full w-[280px] flex-col border-r border-border bg-sidebar">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-2 top-3"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Close navigation"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <SidebarBody onNavigate={() => setMobileOpen(false)} />
           </div>
         </div>
       ) : null}
 
       <div className="flex min-w-0 flex-col">
         <Topbar onOpenNav={() => setMobileOpen(true)} />
-        <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          {children}
+        <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-8 sm:px-6 lg:px-10">
+          <div key={location.pathname} className="animate-fade-in">
+            {children}
+          </div>
         </main>
-        <footer className="border-t border-border/70 px-4 py-4 sm:px-6 lg:px-8">
-          <p className="text-[11px] text-muted-foreground">
-            Phase 1 foundation + Phase 2 source ingestion. Claim extraction and verification are
-            Phase 3.
-          </p>
-        </footer>
       </div>
-
     </div>
   );
 }

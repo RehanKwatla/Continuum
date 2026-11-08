@@ -14,6 +14,8 @@ import SourceDetails from "@/pages/SourceDetails";
 import UploadSources from "@/pages/UploadSources";
 import GitHubRepositories from "@/pages/GitHubRepositories";
 import NotFound from "@/pages/NotFound";
+import ComingSoon from "@/pages/ComingSoon";
+import Settings from "@/pages/Settings";
 
 /**
  * Every authenticated screen renders inside the AppShell via ProtectedRoute,
@@ -45,6 +47,28 @@ export function AppRouter() {
 
         <Route path="/sources" element={<Sources />} />
         <Route path="/sources/:sourceId" element={<SourceDetails />} />
+
+        <Route
+          path="/memory"
+          element={
+            <ComingSoon
+              eyebrow="Later phase"
+              title="Knowledge Memory"
+              description="Claims, evidence and conflicts will live here once extraction is implemented. Nothing on this page is generated from your sources."
+            />
+          }
+        />
+        <Route
+          path="/handovers"
+          element={
+            <ComingSoon
+              eyebrow="Later phase"
+              title="Handovers"
+              description="Handover briefs will be assembled from reviewed claims. This screen is a prepared interface, not a generated document."
+            />
+          }
+        />
+        <Route path="/settings" element={<Settings />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

@@ -91,13 +91,13 @@ export default function Login() {
           <span className="flex h-7 w-7 items-center justify-center rounded-md border border-primary/40 bg-primary/10">
             <Activity className="h-3.5 w-3.5 text-primary" />
           </span>
-          <span className="text-sm font-semibold tracking-tight">Continuum</span>
+          <span className="wordmark">Continuum</span>
         </Link>
         <div className="max-w-md">
-          <h1 className="text-2xl font-semibold leading-tight tracking-tight">
-            People may leave.
+          <h1 className="font-display text-4xl font-medium leading-[1.05] tracking-tight text-sand">
+            People leave.
             <br />
-            <span className="text-muted-foreground">The knowledge shouldn&apos;t have to.</span>
+            Knowledge stays.
           </h1>
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
             Sign in to connect authorised sources and reconstruct project knowledge. Access is

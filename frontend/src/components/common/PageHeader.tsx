@@ -21,7 +21,9 @@ export function PageHeader({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1.5">
           {eyebrow ? <p className="label-eyebrow">{eyebrow}</p> : null}
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
+          <h1 className="font-display text-3xl font-medium tracking-tight text-sand sm:text-[2rem] sm:leading-tight">
+            {title}
+          </h1>
           {description ? (
             <div className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {description}
@@ -46,13 +48,15 @@ export function MetricTile({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="panel p-4">
+    <div className="border-b border-border py-4 sm:border-b-0 sm:border-r sm:px-5 sm:py-1 sm:last:border-r-0">
       <div className="flex items-start justify-between gap-3">
         <p className="label-eyebrow">{label}</p>
-        {icon ? <span className="text-muted-foreground">{icon}</span> : null}
+        {icon ? <span className="text-muted-foreground/80">{icon}</span> : null}
       </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+      <p className="mt-3 font-display text-3xl font-medium tabular-nums tracking-tight text-sand">
+        {value}
+      </p>
+      {hint ? <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

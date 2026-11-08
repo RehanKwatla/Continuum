@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   CircleDashed,
@@ -17,9 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { FutureWorkspacePreview } from "@/components/common/FutureWorkspace";
+import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { MetricTile, PageHeader } from "@/components/common/PageHeader";
 import { ProjectStatusBadge } from "@/components/common/StatusBadge";
+import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import { useDeleteProject, useProject } from "@/hooks/use-projects";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -43,6 +46,8 @@ export default function ProjectDetails() {
   const { toast } = useToast();
   const deleteProject = useDeleteProject();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view");
 
   const handleDelete = async () => {
     if (!projectId) return;
@@ -131,6 +136,22 @@ export default function ProjectDetails() {
           </>
         }
       />
+
+      <ProjectWorkspaceNav projectId={data.id} />
+
+      {view === "memory" || view === "timeline" || view === "handover" ? (
+        <div className="space-y-4">
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            {view === "timeline"
+              ? "A project timeline will be built from source timestamps. It is not computed yet."
+              : view === "handover"
+                ? "A handover brief will be written from reviewed claims. None are available for this project."
+                : "Knowledge memory will collect claims extracted from this project's sources. Extraction is not running."}
+          </p>
+          <FutureWorkspacePreview />
+        </div>
+      ) : (
+      <>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricTile
@@ -256,16 +277,18 @@ export default function ProjectDetails() {
                       {formatRelative(repository.connected_at)}
                     </span>
                     {repository.html_url ? (
-                      <Button variant="ghost" size="icon" asChild>
-                        <a
-                          href={repository.html_url}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          aria-label={`Open ${repository.full_name} on GitHub`}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </Button>
+                      <Tooltip label="Open on GitHub">
+                        <Button variant="ghost" size="icon" asChild>
+                          <a
+                            href={repository.html_url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            aria-label={`Open ${repository.full_name} on GitHub`}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </Tooltip>
                     ) : null}
                   </div>
                 </li>
@@ -364,6 +387,8 @@ export default function ProjectDetails() {
         <FolderKanban className="h-3.5 w-3.5" />
         Project id <span className="mono">{data.id}</span>
       </p>
+      </>
+      )}
     </div>
   );
 }

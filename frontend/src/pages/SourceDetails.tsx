@@ -17,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { ErrorState } from "@/components/common/States";
 import { PageHeader, PanelSkeleton } from "@/components/common/PageHeader";
+import { Tooltip } from "@/components/common/Tooltip";
 import {
   AccessLabelBadge,
   ProcessingStatusBadge,
@@ -210,9 +211,14 @@ export default function SourceDetails() {
           </CardHeader>
           <CardContent className="p-0">
             {content ? (
-              <pre className="max-h-[560px] overflow-auto whitespace-pre-wrap break-words border-t border-border/60 bg-secondary/20 p-5 font-mono text-xs leading-relaxed text-foreground">
-                {content}
-              </pre>
+              <ol className="max-h-[560px] overflow-auto border-t border-border/60 bg-secondary/20 py-3 font-mono text-xs leading-relaxed text-foreground">
+                {content.split("\n").map((line, index) => (
+                  <li key={index} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-3 px-3">
+                    <span className="select-none text-right text-muted-foreground">{index + 1}</span>
+                    <span className="whitespace-pre-wrap break-words">{line || " "}</span>
+                  </li>
+                ))}
+              </ol>
             ) : (
               <p className="border-t border-border/60 p-5 text-xs text-muted-foreground">
                 No text was extracted from this source. It may have been a binary, a skipped archive
@@ -260,14 +266,16 @@ export default function SourceDetails() {
                       <code className="min-w-0 flex-1 break-all rounded-md border border-border/70 bg-secondary/40 p-2 font-mono text-[11px]">
                         {data.content_hash}
                       </code>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Copy content hash"
-                        onClick={() => void handleCopyHash()}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
+                      <Tooltip label="Copy content hash">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Copy content hash"
+                          onClick={() => void handleCopyHash()}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </Tooltip>
                     </div>
                   </div>
                 </>

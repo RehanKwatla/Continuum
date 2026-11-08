@@ -3,44 +3,61 @@
 @tailwind utilities;
 
 /*
- * Continuum design tokens — deep charcoal/navy canvas, warm-white surfaces,
- * a single restrained gold accent. Dark is the default and only shipping theme.
+ * Continuum — charcoal canvas, sand type, electric blue for action only.
+ * Dark is the only shipping theme.
  */
 @layer base {
   :root,
   .dark {
-    --background: 222 44% 6%;
-    --foreground: 40 24% 96%;
+    /* Charcoal #1E1E1C */
+    --background: 60 3% 11%;
+    /* Pale sand for body copy */
+    --foreground: 38 36% 86%;
 
-    --card: 222 38% 9%;
-    --card-foreground: 40 24% 96%;
+    /* Elevated charcoal #252522 */
+    --card: 60 4% 14%;
+    --card-foreground: 38 36% 86%;
 
-    --popover: 222 42% 8%;
-    --popover-foreground: 40 24% 96%;
+    /* Deep charcoal #151513 */
+    --sidebar: 60 5% 8%;
+    --popover: 60 5% 9%;
+    --popover-foreground: 38 36% 86%;
 
-    --primary: 43 72% 55%;
-    --primary-foreground: 222 47% 8%;
+    /* Slightly lifted main canvas */
+    --canvas: 60 3% 12%;
 
-    --secondary: 222 28% 15%;
-    --secondary-foreground: 40 24% 96%;
+    /* Electric blue #2F6BFF */
+    --primary: 223 100% 59%;
+    --primary-foreground: 40 40% 94%;
 
-    --muted: 222 26% 14%;
-    --muted-foreground: 220 14% 62%;
+    /* Soft charcoal #30302C */
+    --secondary: 60 4% 18%;
+    --secondary-foreground: 38 28% 88%;
 
-    --accent: 222 28% 17%;
-    --accent-foreground: 40 24% 96%;
+    --muted: 60 4% 16%;
+    /* Muted text #AAA69E */
+    --muted-foreground: 40 6% 64%;
 
-    --destructive: 0 62% 51%;
-    --destructive-foreground: 40 24% 96%;
+    --accent: 60 4% 18%;
+    --accent-foreground: 38 36% 90%;
 
-    --border: 222 22% 19%;
-    --input: 222 22% 21%;
-    --ring: 43 72% 55%;
+    /* Muted red */
+    --destructive: 4 46% 46%;
+    --destructive-foreground: 40 40% 96%;
 
-    --status-ok: 158 60% 45%;
-    --status-warn: 38 84% 56%;
-    --status-danger: 0 66% 56%;
-    --status-info: 200 68% 55%;
+    /* Border #3A3934 */
+    --border: 50 6% 22%;
+    --input: 50 5% 24%;
+    --ring: 223 100% 59%;
+
+    /* Sand #D8CBB3 */
+    --sand: 39 32% 77%;
+
+    /* Restrained status hues — not the interaction blue */
+    --status-ok: 152 24% 42%;
+    --status-warn: 36 42% 48%;
+    --status-danger: 4 48% 50%;
+    --status-info: 188 22% 44%;
 
     --radius: 0.5rem;
   }
@@ -58,28 +75,38 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  ::selection {
-    background-color: hsl(var(--primary) / 0.28);
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: Manrope, Inter, ui-sans-serif, system-ui, sans-serif;
   }
 
-  /* A very restrained background texture — no decorative gradients. */
+  ::selection {
+    background-color: hsl(var(--primary) / 0.28);
+    color: hsl(var(--foreground));
+  }
+
   #root {
     min-height: 100vh;
   }
 }
 
 @layer components {
-  /* Thin, low-contrast separators and hairlines used across the shell. */
   .hairline-top {
-    @apply border-t border-border/70;
+    @apply border-t border-border/80;
   }
 
   .panel {
-    @apply rounded-lg border border-border/80 bg-card/70 backdrop-blur-[2px];
+    @apply rounded-lg border border-border bg-card;
   }
 
   .label-eyebrow {
-    @apply text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground;
+    @apply font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground;
+  }
+
+  .wordmark {
+    @apply font-display text-[13px] font-semibold uppercase tracking-[0.28em] text-sand;
   }
 
   .focus-ring {
@@ -87,11 +114,10 @@
   }
 
   .mono {
-    @apply font-mono text-[12.5px] tracking-tight;
+    @apply font-mono text-[12px] tracking-tight;
   }
 }
 
-/* Scrollbars — subtle, matching the canvas. */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -105,5 +131,5 @@
   border: 3px solid hsl(var(--background));
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(222 20% 28%);
+  background-color: hsl(50 6% 32%);
 }

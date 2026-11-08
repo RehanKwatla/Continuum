@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip } from "@/components/common/Tooltip";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHealth } from "@/hooks/use-dashboard";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border/70 bg-background/85 px-4 backdrop-blur sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-canvas/90 px-4 backdrop-blur-sm sm:px-6 lg:px-10">
       <Button
         variant="ghost"
         size="icon"
@@ -77,23 +78,25 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
       </nav>
 
       <div className="ml-auto flex items-center gap-3">
-        <span
-          className="hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex"
-          title={health.data ? `API v${health.data.version}` : "API unreachable"}
+        <Tooltip
+          className="hidden sm:inline-flex"
+          label={health.data ? `API v${health.data.version}` : "API unreachable"}
         >
-          <Server className="h-3.5 w-3.5" />
-          <span
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              health.isSuccess
-                ? "bg-status-ok"
-                : health.isError
-                  ? "bg-status-danger"
-                  : "bg-status-warn",
-            )}
-          />
-          {health.isSuccess ? "API online" : health.isError ? "API offline" : "Checking…"}
-        </span>
+          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Server className="h-3.5 w-3.5" />
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                health.isSuccess
+                  ? "bg-status-ok"
+                  : health.isError
+                    ? "bg-status-danger"
+                    : "bg-status-warn",
+              )}
+            />
+            {health.isSuccess ? "API online" : health.isError ? "API offline" : "Checking…"}
+          </span>
+        </Tooltip>
 
         {isDevSession ? (
           <Badge variant="warn" className="hidden sm:inline-flex">

@@ -33,6 +33,13 @@ import {
 } from "@/lib/source-meta";
 import type { ProcessingStatus, SourceType } from "@/types";
 
+function greeting(now = new Date()) {
+  const hour = now.getHours();
+  if (hour < 12) return "Good morning.";
+  if (hour < 17) return "Good afternoon.";
+  return "Good evening.";
+}
+
 function Breakdown({
   title,
   icon,
@@ -99,8 +106,8 @@ export default function Dashboard() {
   const header = (
     <PageHeader
       eyebrow="Overview"
-      title="Dashboard"
-      description="Live totals computed from PostgreSQL. Every number below is read from the API — nothing here is mocked."
+      title={greeting()}
+      description="Your project continuity workspace. Every number below is read from the API."
       actions={
         <>
           <Button variant="outline" size="sm" onClick={() => setCreateWorkspaceOpen(true)}>
@@ -170,9 +177,9 @@ export default function Dashboard() {
         </Card>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="panel grid sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile
-          label="Projects"
+          label="Active projects"
           value={data.total_projects}
           hint={`${data.total_workspaces} workspace${data.total_workspaces === 1 ? "" : "s"}`}
           icon={<FolderKanban className="h-4 w-4" />}
@@ -184,13 +191,7 @@ export default function Dashboard() {
           icon={<Database className="h-4 w-4" />}
         />
         <MetricTile
-          label="Repositories"
-          value={data.total_connected_repositories}
-          hint="GitHub repositories linked to projects"
-          icon={<GitBranch className="h-4 w-4" />}
-        />
-        <MetricTile
-          label="Processing completed"
+          label="Processed records"
           value={data.processing_status_counts.completed ?? 0}
           hint={
             (data.processing_status_counts.failed ?? 0) > 0
@@ -199,8 +200,20 @@ export default function Dashboard() {
           }
           icon={<CircleDashed className="h-4 w-4" />}
         />
+        <MetricTile
+          label="Pending reviews"
+          value={(data.processing_status_counts.pending ?? 0) + (data.processing_status_counts.processing ?? 0)}
+          hint={
+            data.total_connected_repositories
+              ? `${data.total_connected_repositories} repositor${data.total_connected_repositories === 1 ? "y" : "ies"} linked. Human review is not active yet.`
+              : "Human review is not active in this build."
+          }
+          icon={<GitBranch className="h-4 w-4" />}
+        />
       </div>
 
+      <div className="space-y-3">
+        <h2 className="font-display text-lg font-medium text-sand">Ingestion status</h2>
       <div className="grid gap-3 lg:grid-cols-2">
         <Breakdown
           title="Sources by type"
@@ -216,6 +229,7 @@ export default function Dashboard() {
           emptyLabel="Nothing has been ingested yet."
           labelFor={(key) => PROCESSING_STATUS_META[key as ProcessingStatus]?.label ?? key}
         />
+      </div>
       </div>
 
       <Card>
@@ -276,7 +290,7 @@ export default function Dashboard() {
       <Card>
         <CardHeader>
           <CardTitle className="text-xs font-medium text-muted-foreground">
-            Recent ingestion activity
+            Recent source activity
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -328,6 +342,43 @@ export default function Dashboard() {
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-xs font-medium text-muted-foreground">Pending actions</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          {(data.processing_status_counts.failed ?? 0) > 0 ? (
+            <p>
+              {data.processing_status_counts.failed} source
+              {data.processing_status_counts.failed === 1 ? "" : "s"} failed processing. Open a
+              project source library to inspect the error.
+            </p>
+          ) : (
+            <p>No failed ingests are waiting. New work starts by creating a project.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-xs font-medium text-muted-foreground">
+            Quick project creation
+          </CardTitle>
+          <Button size="sm" asChild>
+            <Link to="/projects/new">
+              <Plus className="h-4 w-4" />
+              New project
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            A project groups the repositories and documents for one continuity effort. Sources are
+            always created inside a project you belong to.
+          </p>
         </CardContent>
       </Card>
 

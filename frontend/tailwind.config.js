@@ -50,6 +50,9 @@ export default {
           danger: "hsl(var(--status-danger))",
           info: "hsl(var(--status-info))",
         },
+        sand: "hsl(var(--sand))",
+        sidebar: "hsl(var(--sidebar))",
+        canvas: "hsl(var(--canvas))",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -68,7 +71,9 @@ export default {
           "Arial",
           "sans-serif",
         ],
+        display: ["Manrope", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: [
+          "JetBrains Mono",
           "ui-monospace",
           "SFMono-Regular",
           "Menlo",

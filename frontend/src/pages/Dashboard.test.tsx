@@ -88,7 +88,7 @@ describe("Dashboard", () => {
     });
     renderDashboard();
 
-    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /good (morning|afternoon|evening)\./i })).toBeInTheDocument();
     expect(screen.queryByText("Connected sources")).not.toBeInTheDocument();
   });
 

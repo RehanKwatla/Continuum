@@ -23,8 +23,10 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/common/PageHeader";
+import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { ProcessingStatusBadge } from "@/components/common/StatusBadge";
+import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import {
   useGitHubBoundary,
@@ -174,6 +176,8 @@ export default function GitHubRepositories() {
           </>
         }
       />
+
+      {projectId ? <ProjectWorkspaceNav projectId={projectId} /> : null}
 
       {status.isLoading ? <Skeleton className="h-24 w-full rounded-lg" /> : null}
 
@@ -358,16 +362,18 @@ export default function GitHubRepositories() {
                         </p>
                       </div>
                       {selected.html_url ? (
-                        <Button variant="ghost" size="icon" asChild>
-                          <a
-                            href={selected.html_url}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            aria-label="Open on GitHub"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </Button>
+                        <Tooltip label="Open on GitHub">
+                          <Button variant="ghost" size="icon" asChild>
+                            <a
+                              href={selected.html_url}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              aria-label="Open on GitHub"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        </Tooltip>
                       ) : null}
                     </div>
                   </div>

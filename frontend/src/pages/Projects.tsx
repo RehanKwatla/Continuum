@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, FolderKanban, Plus, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,10 @@ const PAGE_SIZE = 20;
 
 export default function Projects() {
   const [search, setSearch] = React.useState("");
-  const [workspaceId, setWorkspaceId] = React.useState<string>(ALL);
+  const [searchParams] = useSearchParams();
+  const [workspaceId, setWorkspaceId] = React.useState<string>(
+    searchParams.get("workspace_id") ?? ALL,
+  );
   const [status, setStatus] = React.useState<string>(ALL);
   const [page, setPage] = React.useState(1);
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = React.useState(false);
@@ -58,6 +61,11 @@ export default function Projects() {
   React.useEffect(() => {
     setPage(1);
   }, [search, workspaceId, status]);
+
+  React.useEffect(() => {
+    const fromUrl = searchParams.get("workspace_id");
+    if (fromUrl) setWorkspaceId(fromUrl);
+  }, [searchParams]);
 
   const workspaceNames = React.useMemo(() => {
     const map = new Map<string, string>();
