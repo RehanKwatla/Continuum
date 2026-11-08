@@ -1,0 +1,24 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: continuum-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: continuum
+      POSTGRES_PASSWORD: continuum
+      POSTGRES_DB: continuum
+    ports:
+      # Host port 5433 avoids colliding with a locally installed PostgreSQL
+      # server that commonly occupies 5432. Point DATABASE_URL at 5433.
+      - "5433:5432"
+    volumes:
+      - continuum_pgdata:/var/lib/postgresql/data
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U continuum -d continuum"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  continuum_pgdata:
