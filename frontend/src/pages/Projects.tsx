@@ -25,6 +25,7 @@ import { PageHeader, TableSkeleton } from "@/components/common/PageHeader";
 import { ProjectStatusBadge } from "@/components/common/StatusBadge";
 import { WorkspaceCreateDialog } from "@/components/common/WorkspaceCreateDialog";
 import { useProjects } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { formatRelative, pluralise } from "@/lib/format";
 import { PROJECT_STATUS_META } from "@/lib/source-meta";
@@ -34,6 +35,7 @@ const ALL = "__all__";
 const PAGE_SIZE = 20;
 
 export default function Projects() {
+  usePageTitle("Projects");
   const [search, setSearch] = React.useState("");
   const [searchParams] = useSearchParams();
   const [workspaceId, setWorkspaceId] = React.useState<string>(

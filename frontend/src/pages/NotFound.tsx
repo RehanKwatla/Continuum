@@ -2,8 +2,10 @@ import { Link, useLocation } from "react-router-dom";
 import { Compass, LayoutDashboard } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 export default function NotFound() {
+  usePageTitle("404 — Page Not Found");
   const location = useLocation();
 
   return (

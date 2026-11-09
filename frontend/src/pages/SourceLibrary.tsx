@@ -37,6 +37,7 @@ import { ProcessingStatusBadge, SourceTypeBadge } from "@/components/common/Stat
 import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useDeleteSource, useSources } from "@/hooks/use-sources";
 import { formatRelative, pluralise } from "@/lib/format";
 import {
@@ -66,6 +67,7 @@ export default function SourceLibrary() {
   const [pendingDelete, setPendingDelete] = React.useState<{ id: string; name: string } | null>(null);
 
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Sources — ${project.data.name}` : "Source Library");
   const deleteSource = useDeleteSource(projectId ?? "");
 
   const params = React.useMemo(

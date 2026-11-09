@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useHealth, useReadiness } from "@/hooks/use-dashboard";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -18,6 +19,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function Settings() {
+  usePageTitle("Settings");
   const { user, provider, isDevSession, signOut } = useAuth();
   const health = useHealth();
   const readiness = useReadiness();
@@ -28,7 +30,8 @@ export default function Settings() {
     setBusy(true);
     try {
       await signOut();
-      navigate("/login", { replace: true });
+      // After sign-out, return to the landing page (not /login which redirects to /dashboard)
+      navigate("/landing", { replace: true });
     } finally {
       setBusy(false);
     }

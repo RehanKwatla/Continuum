@@ -69,10 +69,13 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Prevent body-level horizontal scroll — individual components use overflow-x-auto */
+    overflow-x: hidden;
   }
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    overflow-x: hidden;
   }
 
   h1,
@@ -116,6 +119,20 @@
   .mono {
     @apply font-mono text-[12px] tracking-tight;
   }
+
+  /* Responsive table container: enables horizontal scroll on the table itself,
+     not the whole page — used for data tables that cannot be card-ified */
+  .table-responsive {
+    @apply w-full overflow-x-auto;
+    /* Ensure the scroll container clips correctly */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent long unbreakable strings (URLs, IDs, hashes) from blowing the layout */
+  .break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -132,4 +149,16 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background-color: hsl(50 6% 32%);
+}
+
+/* ---- Accessibility: reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

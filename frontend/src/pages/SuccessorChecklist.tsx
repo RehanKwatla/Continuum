@@ -24,6 +24,7 @@ import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   useCreateSuccessorTask,
   useDeriveSuccessorTasks,
@@ -149,6 +150,7 @@ function TaskRow({
 export default function SuccessorChecklist() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Checklist — ${project.data.name}` : "Successor Checklist");
   const tasks = useSuccessorTasks(projectId);
   const derive = useDeriveSuccessorTasks(projectId ?? "");
   const update = useUpdateSuccessorTask(projectId ?? "");

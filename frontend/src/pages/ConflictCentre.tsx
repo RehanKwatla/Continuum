@@ -14,6 +14,7 @@ import { ClaimStatusBadge, ConflictStatusBadge } from "@/components/common/Statu
 import { EvidenceList } from "@/components/intelligence/EvidenceViewer";
 import { useConflict, useConflicts, useResolveConflict } from "@/hooks/use-memory";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   CONFLICT_KIND_META,
   CONFLICT_RESOLUTION_OPTIONS,
@@ -330,6 +331,7 @@ function ConflictDetailPanel({
 export default function ConflictCentre() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Conflicts — ${project.data.name}` : "Conflict Centre");
   const [filter, setFilter] = React.useState<ConflictStatus | "all">("open");
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 

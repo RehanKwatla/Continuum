@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { PageHeader } from "@/components/common/PageHeader";
 import { WorkspaceCreateDialog } from "@/components/common/WorkspaceCreateDialog";
 import { useCreateProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { toErrorMessage } from "@/services/api";
 import { PROJECT_STATUS_META } from "@/lib/source-meta";
@@ -29,6 +30,7 @@ import type { ProjectStatus } from "@/types";
 const DEFAULT_STATUS: ProjectStatus = "active";
 
 export default function ProjectCreate() {
+  usePageTitle("New Project");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const workspaces = useWorkspaces();

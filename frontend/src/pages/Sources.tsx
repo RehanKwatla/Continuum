@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -72,6 +73,7 @@ function OAuthResultBanner() {
 }
 
 export default function Sources() {
+  usePageTitle("Sources");
   const status = useGitHubStatus();
   const boundary = useGitHubBoundary();
   const projects = useProjects({ page: 1, page_size: 5 });

@@ -13,11 +13,13 @@ endpoint backs each screen. Follow it top to bottom and the demo runs in ~7 minu
 > **NO SIGN-IN OR CREDENTIALS REQUIRED FOR JUDGES.**
 > For the CodeZen Hackathon, judges can open any deployed URL directly in a private/incognito window without signing in, registering, or providing an email address.
 >
-> - **Direct landing:** Visiting `/` or `/dashboard` loads the full dashboard and seeds the **Continuum Demo Workspace** and **Payment Gateway System** project automatically.
+> - **Direct landing:** Visiting `/` or `/dashboard` loads the dashboard and seeds the **Continuum Demo Workspace** with three synthetic projects: **Payment Gateway System**, **Subscription Billing & Dunning**, and **Cold-Chain Inventory Alerts**.
 > - **Unobtrusive environment badge:** The top navigation bar clearly flags `PUBLIC DEMO ENVIRONMENT`.
 > - **Pre-seeded synthetic data:** Includes 8 documentation sources (ADRs, architecture, runbooks, OpenAPI spec), 28 claims across Core Architecture, Database, Authentication, API & Integrations, Ops & Runbooks, 1 resolved and 1 open conflict, an approved v1 handover, and a 98.2% readiness evaluation.
 > - **Safety guards:** Public demo endpoints are read-only by default (`403 public_demo_read_only`) to prevent state corruption, with strict workspace isolation.
 > - **Safe disposable reset:** Judges can click **"Reset Demo Data"** on the dashboard or in the profile menu at any time to re-seed the baseline demonstration workspace.
+
+> **No GitHub connection is needed.** The dashboard's **Explore sample projects** cards open ready-to-use scenarios with realistic constraints, evidence, review states, and successor tasks. These are synthetic judge fixtures, so judges can start exploring immediately.
 
 ---
 
@@ -83,9 +85,9 @@ Run these in order. Everything below is copy-pasteable.
 | 6 | Frontend calls an authenticated backend | dev token set | `VITE_DEV_AUTH_TOKEN=dev-local-token` in `frontend/.env` matches backend `DEV_AUTH_TOKEN` |
 | 7 | Dev auth enabled on backend | env check | `ENVIRONMENT=development` and `ALLOW_DEV_AUTH=true` |
 | 8 | Sign in with a dev session | open `/login` → "Continue with a development session" | Lands on `/dashboard` |
-| 9 | Synthetic project seeded | see below | A project named **"Payments Service Handover (ground truth)"** appears |
+| 9 | Judge scenarios seeded | see below | The dashboard lists **Payment Gateway System**, **Subscription Billing & Dunning**, and **Cold-Chain Inventory Alerts** |
 
-**Seeding the synthetic project (ground truth):**
+**Seeding the evaluation synthetic project (ground truth):**
 
 - Create/open any workspace, go to `/evaluation`, and in the empty state click
   **"Seed ground-truth corpus"** (admin-only). This is backed by

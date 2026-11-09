@@ -23,6 +23,7 @@ import { PageHeader, PanelSkeleton } from "@/components/common/PageHeader";
 import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useAuditTrail } from "@/hooks/use-memory";
 import { formatDateTime, humanise } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -161,6 +162,7 @@ function AuditRow({ entry, projectId }: { entry: AuditLogRead; projectId: string
 export default function AuditTrail() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Audit Trail — ${project.data.name}` : "Audit Trail");
   const [params, setParams] = useSearchParams();
 
   const filter = params.get("filter") ?? "all";

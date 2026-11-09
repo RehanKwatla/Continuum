@@ -7,10 +7,12 @@ import { PageHeader, PanelSkeleton } from "@/components/common/PageHeader";
 import { FreshnessBadge, SourceTypeBadge } from "@/components/common/StatusBadge";
 import { ClaimCard } from "@/components/intelligence/ClaimCard";
 import { useUncertainty } from "@/hooks/use-memory";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { formatDateTime } from "@/lib/format";
 
 export default function UncertaintyCentre() {
   const { projectId } = useParams<{ projectId: string }>();
+  usePageTitle("Uncertainty Centre");
   const uncertainty = useUncertainty(projectId);
 
   if (!projectId) return null;

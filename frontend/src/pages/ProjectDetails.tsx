@@ -27,6 +27,7 @@ import { ProjectStatusBadge } from "@/components/common/StatusBadge";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import { useDeleteProject, useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { PROCESSING_STATUS_META, SOURCE_TYPE_META } from "@/lib/source-meta";
 import { toErrorMessage } from "@/services/api";
@@ -44,6 +45,7 @@ function DefinitionRow({ label, children }: { label: string; children: React.Rea
 export default function ProjectDetails() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data?.name ?? "Project");
   const navigate = useNavigate();
   const { toast } = useToast();
   const deleteProject = useDeleteProject();

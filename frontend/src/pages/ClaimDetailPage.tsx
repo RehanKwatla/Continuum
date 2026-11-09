@@ -39,6 +39,7 @@ import {
   useVerifyClaim,
 } from "@/hooks/use-memory";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   CLAIM_TYPE_ORDER,
   CONFLICT_KIND_META,
@@ -84,6 +85,7 @@ export default function ClaimDetailPage() {
   const { projectId, claimId } = useParams<{ projectId: string; claimId: string }>();
   const claim = useClaim(projectId, claimId);
   const project = useProject(projectId);
+  usePageTitle(claim.data ? `Claim — ${claim.data.text.slice(0, 40)}` : "Claim Detail");
   const verify = useVerifyClaim(projectId ?? "");
   const review = useReviewClaim(projectId ?? "");
   const edit = useEditClaim(projectId ?? "");

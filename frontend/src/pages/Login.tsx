@@ -11,12 +11,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useReadiness } from "@/hooks/use-dashboard";
 import { supabaseConfigured } from "@/lib/env";
 import { signInWithDevToken, signInWithPassword, signUpWithPassword, syncSession } from "@/services/auth";
 import { toErrorMessage } from "@/services/api";
 
 export default function Login() {
+  usePageTitle("Sign In");
   const navigate = useNavigate();
   const location = useLocation();
   const { refresh } = useAuth();

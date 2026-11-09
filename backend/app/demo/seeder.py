@@ -34,8 +34,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import DEMO_EMAIL
+from app.ai.prompts import HANDOVER_SECTIONS
 from app.models.audit import AuditLog
 from app.models.claim import Claim
+from app.models.claim_history import ClaimHistory
 from app.models.conflict import Conflict, ConflictClaim
 from app.models.enums import (
     AccessLabel,
@@ -48,6 +50,8 @@ from app.models.enums import (
     ProcessingRunStatus,
     ProcessingStatus,
     ProjectStatus,
+    SuccessorTaskPriority,
+    SuccessorTaskStatus,
     SourceType,
     VerificationVerdict,
     WorkspaceRole,
@@ -101,6 +105,7 @@ class DemoSeedResult:
     project_name: str
     created: bool
     counts: dict[str, int] = field(default_factory=dict)
+    projects: list[dict[str, Any]] = field(default_factory=list)
 
 
 def demo_workspace_name() -> str:
@@ -701,6 +706,7 @@ def ensure_demo_data(db: Session) -> DemoSeedResult:
     if existing is not None:
         project = get_demo_project(db)
         if project is not None and _count(db, Claim, project.id) > 0:
+            _ensure_scenario_projects(db, existing, _ensure_demo_user(db))
             return _result(db, existing, project, created=False)
 
     with _seed_lock:
@@ -708,6 +714,7 @@ def ensure_demo_data(db: Session) -> DemoSeedResult:
         if existing is not None:
             project = get_demo_project(db)
             if project is not None and _count(db, Claim, project.id) > 0:
+                _ensure_scenario_projects(db, existing, _ensure_demo_user(db))
                 return _result(db, existing, project, created=False)
         return _build(db)
 
@@ -760,6 +767,20 @@ def _result(db: Session, workspace: Workspace, project: Project, *, created: boo
             "successor_tasks": total(SuccessorTask),
             "knowledge_gaps": total(KnowledgeGap),
         },
+        projects=[
+            {
+                "id": row.id,
+                "name": row.name,
+                "description": row.description or "Synthetic judge scenario.",
+                "focus": next(
+                    (spec["focus"] for spec in _SCENARIO_PROJECTS if spec["name"] == row.name),
+                    "Conflict review, evidence-backed handover, and project readiness",
+                ),
+            }
+            for row in db.execute(
+                select(Project).where(Project.workspace_id == workspace.id).order_by(Project.created_at)
+            ).scalars().all()
+        ],
     )
 
 
@@ -843,6 +864,8 @@ def _build(db: Session) -> DemoSeedResult:
         project.id, user_id=user.id, workspace_id=workspace.id
     )
 
+    _ensure_scenario_projects(db, workspace, user)
+
     run.source_count = len(sources)
     run.claim_count = len(claims) + len(conflicting)
     run.verified_count = len(claims)
@@ -860,6 +883,430 @@ def _build(db: Session) -> DemoSeedResult:
         "Seeded public demo workspace %s (project %s)", workspace.id, project.id
     )
     return _result(db, workspace, project, created=True)
+
+
+# ---------------------------------------------------------------------------
+# Additional judge scenarios
+# ---------------------------------------------------------------------------
+_SCENARIO_PROJECTS: tuple[dict[str, Any], ...] = (
+    {
+        "name": "Subscription Billing & Dunning",
+        "focus": "Idempotency, payment retries, replay safety",
+        "description": (
+            "Synthetic handover scenario: a subscription billing service with a 24-hour "
+            "payment-provider idempotency window, 90-day internal key retention, and a "
+            "three-attempt dunning schedule. Resolve a worker-concurrency conflict and "
+            "design a safe replay plan before migrating legacy account-level keys."
+        ),
+        "departing": "Billing Platform Lead",
+        "successor": "Subscription Reliability Engineer",
+        "sources": (
+            {
+                "key": "overview", "name": "billing-platform/README.md", "type": SourceType.GITHUB_README,
+                "days": 18, "author": "Demo Author",
+                "content": "# Subscription Billing\nThe service creates monthly invoices in UTC and collects payment through an external provider.\nInvoice creation and collection are separate jobs so a provider outage does not lose an issued invoice.\nThe API is built with FastAPI, PostgreSQL and a queue-backed worker pool.\n",
+                "quotes": (
+                    "The service creates monthly invoices in UTC and collects payment through an external provider.",
+                    "Invoice creation and collection are separate jobs so a provider outage does not lose an issued invoice.",
+                    "The API is built with FastAPI, PostgreSQL and a queue-backed worker pool.",
+                ),
+            },
+            {
+                "key": "adr", "name": "billing-platform/docs/adr/0012-idempotency.md", "type": SourceType.GITHUB_FILE,
+                "days": 13, "author": "Demo Author",
+                "content": "# ADR-0012: Invoice idempotency\nEvery invoice receives a stable internal idempotency key retained for 90 days.\nThe payment provider forgets request idempotency keys after 24 hours.\nA replay must query the provider before retrying when the last attempt is older than 24 hours.\n",
+                "quotes": (
+                    "Every invoice receives a stable internal idempotency key retained for 90 days.",
+                    "The payment provider forgets request idempotency keys after 24 hours.",
+                    "A replay must query the provider before retrying when the last attempt is older than 24 hours.",
+                ),
+            },
+            {
+                "key": "runbook", "name": "billing-platform/docs/runbooks/dunning.md", "type": SourceType.GITHUB_FILE,
+                "days": 8, "author": "Demo Author",
+                "content": "# Dunning runbook\nCollection retries run 1, 3 and 7 days after the first failed payment.\nRetries stop immediately when a subscription is cancelled.\nThe worker runbook sets collection concurrency to 16 jobs per process.\n",
+                "quotes": (
+                    "Collection retries run 1, 3 and 7 days after the first failed payment.",
+                    "Retries stop immediately when a subscription is cancelled.",
+                    "The worker runbook sets collection concurrency to 16 jobs per process.",
+                ),
+            },
+            {
+                "key": "pull", "name": "Pull request #284 - Increase collection worker pool", "type": SourceType.GITHUB_PULL_REQUEST,
+                "days": 4, "author": "Demo Author",
+                "content": "# Pull request #284\nThe production worker pool is configured for 24 concurrent collection jobs per process.\nThe legacy migration remains blocked until the replay job distinguishes provider retries inside and outside the 24-hour key window.\n",
+                "quotes": (
+                    "The production worker pool is configured for 24 concurrent collection jobs per process.",
+                    "The legacy migration remains blocked until the replay job distinguishes provider retries inside and outside the 24-hour key window.",
+                ),
+            },
+            {
+                "key": "issue", "name": "Issue #317 - Tax rounding across credit notes", "type": SourceType.GITHUB_ISSUE,
+                "days": 2, "author": "Demo Author",
+                "content": "# Issue #317\nOpen question: should tax rounding be applied per invoice line or to the invoice subtotal?\nCredit notes currently reuse the original invoice tax mode, but the owner of the cross-region rounding policy is not established.\n",
+                "quotes": (
+                    "Open question: should tax rounding be applied per invoice line or to the invoice subtotal?",
+                    "Credit notes currently reuse the original invoice tax mode, but the owner of the cross-region rounding policy is not established.",
+                ),
+            },
+        ),
+        "claims": (
+            ("Invoices are created monthly using UTC billing boundaries.", ClaimType.OPERATIONAL_PROCEDURE, "overview", "The service creates monthly invoices in UTC and collects payment through an external provider.", True),
+            ("Invoice creation and payment collection run as separate jobs.", ClaimType.ARCHITECTURE, "overview", "Invoice creation and collection are separate jobs so a provider outage does not lose an issued invoice.", True),
+            ("The billing API uses FastAPI, PostgreSQL and queue-backed workers.", ClaimType.ARCHITECTURE, "overview", "The API is built with FastAPI, PostgreSQL and a queue-backed worker pool.", False),
+            ("An internal invoice idempotency key is retained for 90 days.", ClaimType.TECHNICAL_CONSTRAINT, "adr", "Every invoice receives a stable internal idempotency key retained for 90 days.", True),
+            ("The payment provider retains request idempotency keys for 24 hours.", ClaimType.DEPENDENCY, "adr", "The payment provider forgets request idempotency keys after 24 hours.", True),
+            ("For a payment replay older than 24 hours, query provider state before retrying.", ClaimType.OPERATIONAL_PROCEDURE, "adr", "A replay must query the provider before retrying when the last attempt is older than 24 hours.", True),
+            ("Collection retries run on days 1, 3 and 7 after the first failure.", ClaimType.OPERATIONAL_PROCEDURE, "runbook", "Collection retries run 1, 3 and 7 days after the first failed payment.", False),
+            ("Dunning stops when a subscription is cancelled.", ClaimType.TECHNICAL_CONSTRAINT, "runbook", "Retries stop immediately when a subscription is cancelled.", True),
+            ("The legacy key migration needs a replay-safe path across the provider's 24-hour retention boundary.", ClaimType.UNFINISHED_WORK, "pull", "The legacy migration remains blocked until the replay job distinguishes provider retries inside and outside the 24-hour key window.", True),
+            ("The collection worker pool is documented at 16 jobs per process.", ClaimType.TECHNICAL_CONSTRAINT, "runbook", "The worker runbook sets collection concurrency to 16 jobs per process.", False),
+            ("The collection worker pool is configured at 24 jobs per process.", ClaimType.TECHNICAL_CONSTRAINT, "pull", "The production worker pool is configured for 24 concurrent collection jobs per process.", False),
+            ("The invoice-line versus subtotal tax-rounding policy is unresolved.", ClaimType.OPEN_QUESTION, "issue", "Open question: should tax rounding be applied per invoice line or to the invoice subtotal?", False),
+        ),
+        "conflict": {"indices": (9, 10), "entity": "collection_worker", "key": "concurrency_per_process", "reason": "The runbook says 16 concurrent jobs per process while the pull request says production runs 24."},
+        "questions": (
+            "Should tax rounding be applied per invoice line or to the invoice subtotal?",
+            "Which team owns the cross-region rounding policy for credit notes?",
+        ),
+        "tasks": (
+            ("Document replay behavior beyond the provider key window", "Prove that retries query provider state after 24 hours and cannot double-charge an invoice.", "critical"),
+            ("Resolve collection worker concurrency", "Confirm whether production should run 16 or 24 concurrent collection jobs per process, then update the runbook or configuration.", "important"),
+            ("Settle tax rounding ownership", "Agree line-level versus subtotal rounding with Finance and record the policy for credit notes.", "important"),
+        ),
+    },
+    {
+        "name": "Cold-Chain Inventory Alerts",
+        "focus": "Offline buffering, alert latency, retention policy",
+        "description": (
+            "Synthetic operations scenario: warehouse temperature alerts must reach on-call "
+            "within 60 seconds while sensors can be offline for 30 minutes. Review the "
+            "conflicting 30/90-day telemetry retention notes and plan an idempotent replay "
+            "that avoids duplicate alerts after network recovery."
+        ),
+        "departing": "Warehouse Systems Engineer",
+        "successor": "Operations Reliability Engineer",
+        "sources": (
+            {
+                "key": "overview", "name": "cold-chain/README.md", "type": SourceType.GITHUB_README,
+                "days": 15, "author": "Demo Author",
+                "content": "# Cold-Chain Inventory Alerts\nThe service monitors refrigerated storage and raises an alert when a calibrated sensor reports an unsafe temperature.\nAlert delivery has a 60-second p95 target from receipt of a valid sensor reading.\nSites continue sampling during a network outage and can buffer readings locally for up to 30 minutes.\n",
+                "quotes": (
+                    "The service monitors refrigerated storage and raises an alert when a calibrated sensor reports an unsafe temperature.",
+                    "Alert delivery has a 60-second p95 target from receipt of a valid sensor reading.",
+                    "Sites continue sampling during a network outage and can buffer readings locally for up to 30 minutes.",
+                ),
+            },
+            {
+                "key": "adr", "name": "cold-chain/docs/adr/0004-alert-hysteresis.md", "type": SourceType.GITHUB_FILE,
+                "days": 11, "author": "Demo Author",
+                "content": "# ADR-0004: Alert hysteresis\nA temperature alert opens after two consecutive readings exceed the product threshold.\nAn alert closes only after three consecutive readings return to the safe range.\nEach reading has a stable device id and sequence number so reconnect replay can be deduplicated.\n",
+                "quotes": (
+                    "A temperature alert opens after two consecutive readings exceed the product threshold.",
+                    "An alert closes only after three consecutive readings return to the safe range.",
+                    "Each reading has a stable device id and sequence number so reconnect replay can be deduplicated.",
+                ),
+            },
+            {
+                "key": "policy", "name": "cold-chain/docs/operations/telemetry-retention.md", "type": SourceType.GITHUB_FILE,
+                "days": 9, "author": "Demo Author",
+                "content": "# Telemetry retention\nThe warehouse operations runbook retains raw sensor telemetry for 30 days.\nCalibration certificates must be current within a 90-day inspection interval.\nA sensor with an expired calibration certificate is marked untrusted and cannot clear an active alert.\n",
+                "quotes": (
+                    "The warehouse operations runbook retains raw sensor telemetry for 30 days.",
+                    "Calibration certificates must be current within a 90-day inspection interval.",
+                    "A sensor with an expired calibration certificate is marked untrusted and cannot clear an active alert.",
+                ),
+            },
+            {
+                "key": "compliance", "name": "Pull request #96 - Add audit export for inspections", "type": SourceType.GITHUB_PULL_REQUEST,
+                "days": 5, "author": "Demo Author",
+                "content": "# Pull request #96\nThe inspection export keeps raw sensor telemetry for 90 days to support food-safety audit requests.\nAlert delivery retries use an outbox and a stable alert id to prevent duplicate pages.\n",
+                "quotes": (
+                    "The inspection export keeps raw sensor telemetry for 90 days to support food-safety audit requests.",
+                    "Alert delivery retries use an outbox and a stable alert id to prevent duplicate pages.",
+                ),
+            },
+            {
+                "key": "issue", "name": "Issue #142 - Replay buffered readings after site outage", "type": SourceType.GITHUB_ISSUE,
+                "days": 2, "author": "Demo Author",
+                "content": "# Issue #142\nThe reconnect worker currently replays buffered sensor readings oldest-first, but it does not pause live ingestion while a device backlog is draining.\nOpen question: should a delayed unsafe reading page immediately when replayed, or be grouped into a single site recovery alert?\n",
+                "quotes": (
+                    "The reconnect worker currently replays buffered sensor readings oldest-first, but it does not pause live ingestion while a device backlog is draining.",
+                    "Open question: should a delayed unsafe reading page immediately when replayed, or be grouped into a single site recovery alert?",
+                ),
+            },
+        ),
+        "claims": (
+            ("The service monitors refrigerated storage and alerts on unsafe readings from calibrated sensors.", ClaimType.ARCHITECTURE, "overview", "The service monitors refrigerated storage and raises an alert when a calibrated sensor reports an unsafe temperature.", True),
+            ("Alert delivery targets p95 under 60 seconds from receipt of a valid reading.", ClaimType.TECHNICAL_CONSTRAINT, "overview", "Alert delivery has a 60-second p95 target from receipt of a valid sensor reading.", True),
+            ("Sites may buffer sensor readings locally for up to 30 minutes while offline.", ClaimType.TECHNICAL_CONSTRAINT, "overview", "Sites continue sampling during a network outage and can buffer readings locally for up to 30 minutes.", True),
+            ("An alert opens after two consecutive readings exceed the product threshold.", ClaimType.OPERATIONAL_PROCEDURE, "adr", "A temperature alert opens after two consecutive readings exceed the product threshold.", False),
+            ("An alert closes after three consecutive readings return to the safe range.", ClaimType.OPERATIONAL_PROCEDURE, "adr", "An alert closes only after three consecutive readings return to the safe range.", False),
+            ("Device id and sequence number make reconnect replay deduplicable.", ClaimType.TECHNICAL_CONSTRAINT, "adr", "Each reading has a stable device id and sequence number so reconnect replay can be deduplicated.", True),
+            ("Calibration certificates are checked on a 90-day inspection interval.", ClaimType.OPERATIONAL_PROCEDURE, "policy", "Calibration certificates must be current within a 90-day inspection interval.", False),
+            ("An expired calibration certificate prevents a sensor from clearing an active alert.", ClaimType.TECHNICAL_CONSTRAINT, "policy", "A sensor with an expired calibration certificate is marked untrusted and cannot clear an active alert.", True),
+            ("The reconnect worker needs a safe ordering plan while buffered readings drain and live readings arrive.", ClaimType.UNFINISHED_WORK, "issue", "The reconnect worker currently replays buffered sensor readings oldest-first, but it does not pause live ingestion while a device backlog is draining.", True),
+            ("The operations runbook sets raw telemetry retention to 30 days.", ClaimType.TECHNICAL_CONSTRAINT, "policy", "The warehouse operations runbook retains raw sensor telemetry for 30 days.", False),
+            ("The inspection export retains raw telemetry for 90 days.", ClaimType.TECHNICAL_CONSTRAINT, "compliance", "The inspection export keeps raw sensor telemetry for 90 days to support food-safety audit requests.", False),
+            ("The alert outbox and stable alert id prevent duplicate pages on retry.", ClaimType.ARCHITECTURE, "compliance", "Alert delivery retries use an outbox and a stable alert id to prevent duplicate pages.", True),
+            ("The policy for paging on delayed unsafe readings during recovery is unresolved.", ClaimType.OPEN_QUESTION, "issue", "Open question: should a delayed unsafe reading page immediately when replayed, or be grouped into a single site recovery alert?", False),
+        ),
+        "conflict": {"indices": (9, 10), "entity": "raw_sensor_telemetry", "key": "retention_days", "reason": "The operations runbook specifies 30 days while the inspection export pull request requires 90 days for audit requests."},
+        "questions": (
+            "Should delayed unsafe readings page immediately during recovery, or be grouped into a site recovery alert?",
+            "Which retention period is authoritative for raw telemetry: 30 days or 90 days?",
+        ),
+        "tasks": (
+            ("Define ordered replay alongside live readings", "Drain each device backlog without reordering sequence numbers or starving new readings, then verify the 60-second p95 target after recovery.", "critical"),
+            ("Resolve telemetry retention policy", "Confirm the audit retention requirement with Compliance and update the runbook and export configuration to match.", "critical"),
+            ("Set recovery paging behavior", "Agree how delayed unsafe readings should page during a site recovery and record the rule for on-call staff.", "important"),
+        ),
+    },
+)
+
+
+def _ensure_scenario_projects(db: Session, workspace: Workspace, user: User) -> None:
+    """Idempotently add realistic, explicitly synthetic judge scenarios."""
+    for spec in _SCENARIO_PROJECTS:
+        project = db.execute(
+            select(Project).where(Project.workspace_id == workspace.id, Project.name == spec["name"])
+        ).scalar_one_or_none()
+        if project is not None and _count(db, Claim, project.id) > 0:
+            existing_claims = list(db.scalars(select(Claim).where(Claim.project_id == project.id)).all())
+            _seed_scenario_tasks(db, project.id, existing_claims, spec)
+            continue
+        if project is None:
+            project = Project(
+                workspace_id=workspace.id,
+                name=spec["name"],
+                description=spec["description"],
+                status=ProjectStatus.HANDOVER_IN_PROGRESS,
+                departing_role=spec["departing"],
+                successor_role=spec["successor"],
+            )
+            db.add(project)
+            db.flush()
+        else:
+            # A partially seeded scenario can be safely rebuilt by the public reset.
+            continue
+
+        run = ProcessingRun(
+            project_id=project.id, requested_by_id=user.id,
+            status=ProcessingRunStatus.COMPLETED, model_name="demo-synthetic-seed",
+            started_at=_days_ago(2), finished_at=_days_ago(2),
+            stats={"synthetic": True, "public_demo": True},
+        )
+        db.add(run)
+        db.flush()
+
+        source_map: dict[str, Source] = {}
+        span_map: dict[tuple[str, str], EvidenceSpan] = {}
+        for source_spec in spec["sources"]:
+            content = source_spec["content"]
+            source = Source(
+                project_id=project.id, source_type=source_spec["type"],
+                source_name=source_spec["name"], external_id=source_spec["name"],
+                content=content, meta={"synthetic": True, "public_demo": True},
+                author=source_spec["author"], created_at_source=_days_ago(source_spec["days"]),
+                access_label=AccessLabel.WORKSPACE, processing_status=ProcessingStatus.COMPLETED,
+                content_hash=_hash(f"{source_spec['type'].value}:{content}"),
+                freshness=FreshnessStatus.CURRENT, freshness_checked_at=_now(),
+                mime_type="text/markdown", size_bytes=len(content.encode("utf-8")),
+                source_url=f"https://github.com/continuum-demo-synthetic/{spec['name'].lower().replace(' ', '-')}/blob/main/{source_spec['name'].split('/')[-1]}",
+            )
+            db.add(source)
+            db.flush()
+            source_map[source_spec["key"]] = source
+            for span_index, quote in enumerate(source_spec["quotes"]):
+                start = content.index(quote)
+                line = content.count("\n", 0, start) + 1
+                span = EvidenceSpan(
+                    source_id=source.id, span_index=span_index,
+                    location=f"{source_spec['name']}#L{line}",
+                    start_offset=start, end_offset=start + len(quote), text=quote,
+                    meta={"synthetic": True, "public_demo": True},
+                )
+                db.add(span)
+                db.flush()
+                span_map[(source_spec["key"], quote)] = span
+
+        claims: list[Claim] = []
+        claim_specs = spec["claims"]
+        conflict_indices = set(spec["conflict"]["indices"])
+        for index, (text, claim_type, source_key, quote, critical) in enumerate(claim_specs):
+            is_conflict = index in conflict_indices
+            is_open_question = claim_type == ClaimType.OPEN_QUESTION
+            status = ClaimStatus.CONFLICT if is_conflict else ClaimStatus.UNCERTAIN if is_open_question else ClaimStatus.VERIFIED
+            claim = Claim(
+                project_id=project.id, run_id=run.id, text=text, claim_type=claim_type,
+                entity=spec["name"].lower().replace(" ", "_"), status=status,
+                critical=critical, author="Demo Author", confidence=0.93 if status == ClaimStatus.VERIFIED else 0.61,
+                reasoning_summary="Synthetic scenario claim linked to an exact source passage.",
+                access_label=AccessLabel.WORKSPACE, dedup_key=_hash(text), revision_number=1,
+            )
+            if status == ClaimStatus.VERIFIED:
+                claim.reviewed_at = _days_ago(1)
+                claim.verified_at = _days_ago(1)
+                claim.verified_by_id = user.id
+                claim.review_note = "Approved in the synthetic judge scenario."
+            db.add(claim)
+            db.flush()
+            source = source_map[source_key]
+            span = span_map[(source_key, quote)]
+            db.add(Evidence(
+                claim_id=claim.id, source_id=source.id, span_id=span.id,
+                source_location=span.location, start_offset=span.start_offset,
+                end_offset=span.end_offset, supporting_quote=quote,
+            ))
+            verdict = VerificationVerdict.SUPPORTS if status == ClaimStatus.VERIFIED else VerificationVerdict.PARTLY if status == ClaimStatus.CONFLICT else VerificationVerdict.NONE
+            db.add(Verification(
+                claim_id=claim.id, run_id=run.id, verdict=verdict,
+                supporting_quote=quote, quote_validated=True,
+                contradicted_by=[], explanation="Deterministic synthetic demonstration evidence assessment.",
+                confidence=claim.confidence, model_name="demo-synthetic-seed",
+            ))
+            if status == ClaimStatus.VERIFIED:
+                db.add(ClaimHistory(
+                    claim_id=claim.id, run_id=run.id, actor_id=user.id,
+                    action="approved", from_status=ClaimStatus.SUPPORTED,
+                    to_status=ClaimStatus.VERIFIED,
+                    note="Approved in the synthetic judge scenario.",
+                ))
+            claims.append(claim)
+        db.flush()
+
+        conflict_claims = [claims[index] for index in spec["conflict"]["indices"]]
+        conflict = Conflict(
+            project_id=project.id, run_id=run.id, entity=spec["conflict"]["entity"],
+            claim_type=ClaimType.TECHNICAL_CONSTRAINT,
+            property_key=spec["conflict"]["key"], kind="value_disagreement",
+            status=ConflictStatus.OPEN, summary=spec["conflict"]["reason"],
+        )
+        db.add(conflict)
+        db.flush()
+        for claim in conflict_claims:
+            db.add(ConflictClaim(conflict_id=conflict.id, claim_id=claim.id, relation="contradicts"))
+
+        for question in spec["questions"]:
+            db.add(OpenQuestion(
+                project_id=project.id, run_id=run.id, question=question,
+                context="Synthetic judge scenario: the source set does not resolve this decision.",
+                entity=spec["name"].lower().replace(" ", "_"),
+                dedup_key=_hash(f"{project.id}:{question}"), status=OpenQuestionStatus.OPEN,
+                access_label=AccessLabel.WORKSPACE,
+            ))
+
+        run.source_count = len(source_map)
+        run.claim_count = len(claims)
+        run.verified_count = sum(claim.status == ClaimStatus.VERIFIED for claim in claims)
+        run.uncertain_count = sum(claim.status == ClaimStatus.UNCERTAIN for claim in claims)
+        run.conflict_count = 1
+        run.open_question_count = len(spec["questions"])
+        _seed_project_memory(db, project_id=project.id, run_id=run.id)
+        _seed_scenario_handover(db, project, user, run.id, claims, spec["name"])
+        evaluation = ReadinessService(db).evaluate(
+            project.id, user_id=user.id, workspace_id=workspace.id,
+            run_id=run.id, source="demo_seed",
+        )
+        dependencies = KnowledgeRiskService(db).analyse_dependencies(
+            project.id, user_id=user.id, workspace_id=workspace.id
+        )
+        gaps = KnowledgeRiskService(db).detect_gaps(
+            project.id, requirements=evaluation.requirements or [], dependencies=dependencies,
+            user_id=user.id, workspace_id=workspace.id,
+        )
+        SuccessorService(db).derive(
+            project.id, user_id=user.id, workspace_id=workspace.id,
+            gaps=[{"gap_key": gap.gap_key, "description": gap.description, "criticality": gap.criticality.value} for gap in gaps],
+        )
+        _seed_scenario_tasks(db, project.id, claims, spec)
+        ContinuityService(db).run_successor_exercise(
+            project.id, user_id=user.id, workspace_id=workspace.id
+        )
+        run.stats = {"synthetic": True, "public_demo": True, "scenario_focus": spec["focus"]}
+        db.flush()
+        logger.info("Seeded synthetic judge scenario %s", project.name)
+
+
+def _seed_scenario_tasks(
+    db: Session, project_id: uuid.UUID, claims: list[Claim], spec: dict[str, Any]
+) -> None:
+    """Make the scenario's solvable constraints visible as successor checklist work."""
+    unfinished = next((claim for claim in claims if claim.claim_type == ClaimType.UNFINISHED_WORK), None)
+    open_question = next((claim for claim in claims if claim.claim_type == ClaimType.OPEN_QUESTION), None)
+    conflict_claims = [claims[index] for index in spec["conflict"]["indices"]]
+    origins = [unfinished, conflict_claims[0] if conflict_claims else None, open_question]
+    for index, (title, description, priority_label) in enumerate(spec["tasks"]):
+        origin_claim = origins[index] if index < len(origins) else None
+        supporting = [str(claim.id) for claim in (conflict_claims if index == 1 else [origin_claim]) if claim is not None]
+        task = None
+        if origin_claim is not None:
+            task = db.execute(
+                select(SuccessorTask).where(
+                    SuccessorTask.project_id == project_id,
+                    SuccessorTask.origin_claim_id == origin_claim.id,
+                )
+            ).scalar_one_or_none()
+        if task is None:
+            task = SuccessorTask(
+                project_id=project_id,
+                title=title,
+                description=description,
+                priority=SuccessorTaskPriority.HIGH if priority_label == "critical" else SuccessorTaskPriority.MEDIUM,
+                status=SuccessorTaskStatus.NOT_STARTED,
+                owner=None,
+                completion_criteria=description,
+                supporting_claim_ids=supporting,
+                dependency_ids=[],
+                origin="manual",
+                origin_claim_id=origin_claim.id if origin_claim else None,
+            )
+            db.add(task)
+        else:
+            task.title = title
+            task.description = description
+            task.priority = SuccessorTaskPriority.HIGH if priority_label == "critical" else SuccessorTaskPriority.MEDIUM
+            task.completion_criteria = description
+            task.supporting_claim_ids = supporting
+        db.flush()
+
+
+def _seed_scenario_handover(
+    db: Session, project: Project, user: User, run_id: uuid.UUID,
+    claims: list[Claim], project_name: str,
+) -> None:
+    """Publish a traceable sample handover using approved scenario claims only."""
+    approved = [claim for claim in claims if claim.status == ClaimStatus.VERIFIED]
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for claim in approved:
+        if claim.claim_type == ClaimType.ARCHITECTURE:
+            key = "architecture"
+        elif claim.claim_type == ClaimType.OPERATIONAL_PROCEDURE:
+            key = "procedures"
+        elif claim.claim_type == ClaimType.TECHNICAL_CONSTRAINT:
+            key = "risks"
+        else:
+            key = "current_state"
+        grouped.setdefault(key, []).append({"text": claim.text, "claim_ids": [str(claim.id)]})
+    sections = [
+        {"key": key, "title": dict(HANDOVER_SECTIONS).get(key, key), "statements": values}
+        for key, values in grouped.items()
+    ]
+    document = HandoverDocument(
+        project_id=project.id, run_id=run_id, generated_by_id=user.id,
+        status=HandoverStatus.VALIDATED, sections=sections,
+        claim_ids=[str(claim.id) for claim in approved], validation_errors=[],
+        summary=f"Synthetic evidence-backed handover for {project_name}.",
+        model_name="demo-synthetic-seed", meta={"synthetic": True, "public_demo": True},
+    )
+    db.add(document)
+    db.flush()
+    service = HandoverService(db)
+    handover = service.ensure_handover(project, user=user, title=f"{project_name} — Project Handover")
+    service.create_version_from_document(handover, user=user, document=document)
+    service.submit_for_review(handover, user=user)
+    service.approve(handover, user=user, role=WorkspaceRole.OWNER, note="Synthetic judge scenario approval.")
+    service.publish(handover, user=user, role=WorkspaceRole.OWNER, note="Published synthetic judge scenario.")
 
 
 def _seed_sources(

@@ -1,7 +1,28 @@
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup } from "@testing-library/react";
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeAll, vi } from "vitest";
+
+afterEach(() => {
+  cleanup();
+});
+
+// Suppress React Router v7 future-flag console warnings in tests.
+// The warnings are informational (not errors) and are suppressed in the
+// production app via the future flags on BrowserRouter in App.tsx.
+beforeAll(() => {
+  const originalWarn = console.warn.bind(console);
+  console.warn = (...args: unknown[]) => {
+    const msg = args[0];
+    if (
+      typeof msg === "string" &&
+      msg.includes("React Router Future Flag Warning")
+    ) {
+      return;
+    }
+    originalWarn(...args);
+  };
+});
 
 afterEach(() => {
   cleanup();

@@ -23,6 +23,7 @@ import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   useEvaluationComparison,
   useEvaluationRuns,
@@ -251,6 +252,7 @@ function ComparisonView({
 export default function EvaluationDashboard() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Evaluation — ${project.data.name}` : "Evaluation");
   const runs = useEvaluationRuns(projectId, { page_size: 50 });
   const exercise = useSuccessorExercise(projectId);
   const runMetrics = useRunEvaluation(projectId ?? "");

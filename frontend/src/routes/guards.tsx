@@ -1,4 +1,5 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
+import * as React from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +18,23 @@ function SessionLoading() {
 }
 
 /**
+ * Injects a noindex meta tag for authenticated/private routes so they
+ * are never crawled by search engines.
+ */
+function NoIndexMeta() {
+  React.useEffect(() => {
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex, nofollow";
+    document.head.appendChild(meta);
+    return () => {
+      document.head.removeChild(meta);
+    };
+  }, []);
+  return null;
+}
+
+/**
  * Application route shell: provides frictionless judge access without login gates
  * or protected-route redirects.
  */
@@ -27,6 +45,7 @@ export function ProtectedRoute() {
 
   return (
     <AppShell>
+      <NoIndexMeta />
       <Outlet />
     </AppShell>
   );

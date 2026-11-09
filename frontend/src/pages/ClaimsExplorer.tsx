@@ -16,6 +16,7 @@ import { EmptyState, ErrorState } from "@/components/common/States";
 import { TableSkeleton } from "@/components/common/PageHeader";
 import { ClaimCard } from "@/components/intelligence/ClaimCard";
 import { useClaims, useProjectMemory } from "@/hooks/use-memory";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { CLAIM_STATUS_META, CLAIM_TYPE_META, CLAIM_TYPE_ORDER } from "@/lib/intelligence-meta";
 import type { ClaimListParams, ClaimStatus, ClaimType } from "@/types";
 
@@ -37,6 +38,7 @@ function parseParams(search: URLSearchParams): ClaimListParams {
 
 export default function ClaimsExplorer() {
   const { projectId } = useParams<{ projectId: string }>();
+  usePageTitle("Claims Explorer");
   const [searchParams, setSearchParams] = useSearchParams();
   const params = React.useMemo(() => parseParams(searchParams), [searchParams]);
   const [searchInput, setSearchInput] = React.useState(params.search ?? "");

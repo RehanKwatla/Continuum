@@ -18,6 +18,7 @@ import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useSuccessorWorkspace } from "@/hooks/use-readiness";
 import { formatDate, humanise } from "@/lib/format";
 import {
@@ -205,6 +206,7 @@ function StartHere({ section, projectId }: { section: WorkspaceSection; projectI
 export default function SuccessorWorkspace() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Successor — ${project.data.name}` : "Successor Workspace");
   const workspace = useSuccessorWorkspace(projectId);
 
   if (!projectId) return null;

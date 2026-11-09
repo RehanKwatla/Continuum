@@ -25,6 +25,7 @@ import {
 } from "@/components/common/StatusBadge";
 import { useToast } from "@/components/ui/toast";
 import { useDeleteSource, useSource } from "@/hooks/use-sources";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { formatBytes, formatDateTime, formatRelative, humanise } from "@/lib/format";
 import { SOURCE_TYPE_META } from "@/lib/source-meta";
 import { toErrorMessage } from "@/services/api";
@@ -66,8 +67,8 @@ export default function SourceDetails() {
   const { sourceId } = useParams<{ sourceId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-
   const source = useSource(sourceId);
+  usePageTitle(source.data ? source.data.source_name : "Source Details");
   const deleteSource = useDeleteSource(source.data?.project_id ?? "");
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 

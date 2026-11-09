@@ -18,6 +18,7 @@ import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { useHealth, useReadiness } from "@/hooks/use-dashboard";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useSystemHealth } from "@/hooks/use-readiness";
 import { formatDateTime, humanise } from "@/lib/format";
 import { RUN_STATUS_META } from "@/lib/intelligence-meta";
@@ -80,6 +81,7 @@ function BreakdownList({ title, data }: { title: string; data: Record<string, nu
 export default function SystemHealth() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `System Health — ${project.data.name}` : "System Health");
   const health = useHealth();
   const ready = useReadiness();
   const system = useSystemHealth(projectId);

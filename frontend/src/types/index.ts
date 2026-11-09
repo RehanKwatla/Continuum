@@ -137,6 +137,7 @@ export interface PublicDemoStatus {
   project_name?: string;
   counts: Record<string, number>;
   links: Record<string, string>;
+  projects?: Array<{ id: string; name: string; description: string; focus: string }>;
 }
 
 // ---------------------------------------------------------------------------

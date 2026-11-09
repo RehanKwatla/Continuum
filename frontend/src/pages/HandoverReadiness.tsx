@@ -22,6 +22,7 @@ import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   useEvaluateReadiness,
   useReadinessHistory,
@@ -278,6 +279,7 @@ function ScorecardPanel({ projectId, scorecard }: { projectId: string; scorecard
 export default function HandoverReadiness() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Readiness — ${project.data.name}` : "Handover Readiness");
   const overview = useReadinessOverview(projectId);
   const history = useReadinessHistory(projectId, { limit: 8 });
   const scorecard = useScorecard(projectId);

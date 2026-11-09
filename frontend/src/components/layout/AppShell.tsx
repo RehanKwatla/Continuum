@@ -239,9 +239,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const location = useLocation();
 
+  // Close on navigation
   React.useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  // Keyboard: Escape closes the mobile drawer
+  React.useEffect(() => {
+    if (!mobileOpen) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [mobileOpen]);
+
+  // Body scroll lock while the mobile drawer is open
+  React.useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
 
   return (
     <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
@@ -250,7 +273,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
           <div
             className="absolute inset-0 bg-black/70"
             onClick={() => setMobileOpen(false)}

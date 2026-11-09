@@ -19,6 +19,7 @@ import { EmptyState, ErrorState } from "@/components/common/States";
 import { MetricTile } from "@/components/common/PageHeader";
 import { RunStatusBadge } from "@/components/common/StatusBadge";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useProjectMemory, useReconstructProject } from "@/hooks/use-memory";
 import { CLAIM_STATUS_META, claimTypeMeta } from "@/lib/intelligence-meta";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -40,6 +41,7 @@ function recordCounts(stats: Record<string, unknown>, key: string): Record<strin
 export default function ProjectMemory() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Project Memory — ${project.data.name}` : "Project Memory");
   const memory = useProjectMemory(projectId);
   const reconstruct = useReconstructProject(projectId ?? "");
   const { toast } = useToast();

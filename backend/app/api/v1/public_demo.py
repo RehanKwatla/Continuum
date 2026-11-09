@@ -55,6 +55,7 @@ class PublicDemoStatus(BaseModel):
     project_name: str | None = None
     counts: dict[str, int] = Field(default_factory=dict)
     links: dict[str, str] = Field(default_factory=dict)
+    projects: list[dict[str, str | uuid.UUID]] = Field(default_factory=list)
 
 
 def _status(result: DemoSeedResult, *, enabled: bool, read_only: bool) -> PublicDemoStatus:
@@ -70,6 +71,7 @@ def _status(result: DemoSeedResult, *, enabled: bool, read_only: bool) -> Public
         project_id=project_id,
         project_name=result.project_name,
         counts=result.counts,
+        projects=result.projects,
         # Relative to the versioned API prefix; the frontend resolves the host.
         links={
             "project": f"/projects/{project_id}",

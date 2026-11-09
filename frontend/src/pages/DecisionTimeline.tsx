@@ -8,6 +8,7 @@ import { EmptyState, ErrorState } from "@/components/common/States";
 import { PageHeader, PanelSkeleton } from "@/components/common/PageHeader";
 import { ClaimStatusBadge } from "@/components/common/StatusBadge";
 import { useClaims } from "@/hooks/use-memory";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { claimTypeMeta } from "@/lib/intelligence-meta";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ function groupByDay<T extends { source_date: string | null }>(items: T[]) {
 
 export default function DecisionTimeline() {
   const { projectId } = useParams<{ projectId: string }>();
+  usePageTitle("Decision Timeline");
   const [decisionsOnly, setDecisionsOnly] = React.useState(true);
   const [order, setOrder] = React.useState<TimelineOrder>("timeline");
 

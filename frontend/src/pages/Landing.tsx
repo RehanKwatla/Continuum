@@ -11,6 +11,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { useHealth } from "@/hooks/use-dashboard";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const WORKFLOW = [
   {
@@ -134,6 +135,7 @@ function HeroPreview() {
 }
 
 export default function Landing() {
+  usePageTitle("Project Continuity");
   const health = useHealth();
 
   return (
@@ -157,10 +159,10 @@ export default function Landing() {
               {health.isSuccess ? `API v${health.data?.version}` : "API status unknown"}
             </span>
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/login">Sign in</Link>
+              <Link to="/dashboard">Explore Demo</Link>
             </Button>
             <Button size="sm" asChild>
-              <Link to="/login">Get Started</Link>
+              <Link to="/dashboard">Enter App</Link>
             </Button>
           </div>
         </div>
@@ -182,17 +184,17 @@ export default function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button size="lg" asChild>
-                <Link to="/login">
-                  Get Started
+                <Link to="/dashboard">
+                  Explore Demo
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
               <Button variant="outline" size="lg" asChild>
-                <a href="#how-it-works">Explore How It Works</a>
+                <a href="#how-it-works">How It Works</a>
               </Button>
             </div>
             <p className="mt-5 font-mono text-[11px] text-muted-foreground">
-              Team Cipher · Connect and reconstruct are live. Verify, review and handover are not.
+              Team Cipher · No sign-in required · Public demo environment
             </p>
           </div>
           <HeroPreview />
@@ -329,8 +331,8 @@ export default function Landing() {
               </p>
             </div>
             <Button size="lg" asChild>
-              <Link to="/login">
-                Get Started
+              <Link to="/dashboard">
+                Explore the Demo
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -341,7 +343,7 @@ export default function Landing() {
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-[1180px] flex-col gap-3 px-4 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <span className="wordmark text-[11px]">Continuum</span>
-          <span>Team Cipher · Agentic Project Continuity Platform</span>
+          <span>© {new Date().getFullYear()} Team Cipher · Agentic Project Continuity Platform</span>
           <span className="font-mono text-[11px]">Connect → Reconstruct → Verify → Review → Handover</span>
         </div>
       </footer>

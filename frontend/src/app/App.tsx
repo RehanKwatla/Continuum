@@ -6,7 +6,7 @@ import { AppRouter } from "@/app/router";
 export default function App() {
   return (
     <AppProviders>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AppRouter />
       </BrowserRouter>
     </AppProviders>

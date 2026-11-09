@@ -35,6 +35,7 @@ import {
 } from "@/components/common/StatusBadge";
 import { useToast } from "@/components/ui/toast";
 import { useDashboard } from "@/hooks/use-dashboard";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { usePublicDemo, useResetPublicDemo } from "@/hooks/use-demo";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { formatRelative } from "@/lib/format";
@@ -99,14 +100,18 @@ function Breakdown({
 }
 
 export default function Dashboard() {
+  usePageTitle("Dashboard");
   const dashboard = useDashboard();
   const workspaces = useWorkspaces();
   const demo = usePublicDemo();
   const resetDemo = useResetPublicDemo();
   const { toast } = useToast();
 
-  const demoProject = dashboard.data?.recent_projects?.[0] ?? null;
-  const demoProjectId = demoProject?.id ?? demo.data?.project_id ?? "";
+  const demoProject =
+    dashboard.data?.recent_projects?.find((project) => project.id === demo.data?.project_id) ??
+    dashboard.data?.recent_projects?.[0] ??
+    null;
+  const demoProjectId = demo.data?.project_id ?? demoProject?.id ?? "";
 
   const handleResetDemo = async () => {
     try {
@@ -246,6 +251,47 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
+            {/* Synthetic project catalog: judges can explore complete scenarios without GitHub. */}
+            {(demo.data?.projects?.length ?? 0) > 1 ? (
+              <section className="space-y-3" aria-labelledby="demo-projects-heading">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <h2 id="demo-projects-heading" className="font-display text-lg font-medium text-sand">
+                      Explore sample projects
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Complete synthetic scenarios with evidence, open decisions, and constraints you can investigate. No GitHub connection is needed.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px]">{demo.data?.projects?.length} scenarios</Badge>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {demo.data?.projects?.map((sample) => (
+                    <Card key={sample.id} className="flex flex-col justify-between border-border/80">
+                      <CardContent className="space-y-3 p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="text-sm font-medium leading-snug">{sample.name}</h3>
+                          <Badge variant="secondary" className="shrink-0 text-[9px]">Synthetic</Badge>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-4">
+                          {sample.description}
+                        </p>
+                        <div className="rounded-md border border-primary/20 bg-primary/[0.04] p-2.5">
+                          <p className="label-eyebrow text-primary">Scenario focus</p>
+                          <p className="mt-1 text-[11px] leading-relaxed text-foreground/90">{sample.focus}</p>
+                        </div>
+                        <Button size="sm" variant="outline" asChild className="w-full text-xs">
+                          <Link to={`/projects/${sample.id}`}>
+                            Explore this project <ArrowRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             {/* Top Level Metric Tiles */}
             <div className="panel grid sm:grid-cols-2 lg:grid-cols-4">
               <MetricTile
@@ -262,14 +308,14 @@ export default function Dashboard() {
               />
               <MetricTile
                 label="Reconstructed Claims"
-                value={demo.data?.counts?.claims ?? 28}
+                value={demo.data?.counts?.claims ?? "—"}
                 hint="Decisions, constraints & dependencies"
                 icon={<FileSearch className="h-4 w-4" />}
               />
               <MetricTile
                 label="Readiness Assessment"
-                value="98.2%"
-                hint="Strong Band · Ready for Handover"
+                value={demo.data?.counts?.readiness_score != null ? `${demo.data.counts.readiness_score}%` : "—"}
+                hint={demo.data?.counts?.readiness_score != null ? "Run 'Re-evaluate' for latest score" : "Run evaluation to see score"}
                 icon={<Gauge className="h-4 w-4 text-status-ok" />}
               />
             </div>
@@ -286,7 +332,7 @@ export default function Dashboard() {
                         Project Memory
                       </CardTitle>
                       <Badge variant="outline" className="font-mono text-[10px]">
-                        28 CLAIMS
+                        {demo.data?.counts?.claims != null ? `${demo.data.counts.claims} CLAIMS` : "CLAIMS"}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">

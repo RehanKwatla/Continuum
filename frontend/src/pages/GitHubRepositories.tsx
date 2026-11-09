@@ -40,6 +40,7 @@ import {
   useStartGitHubConnect,
 } from "@/hooks/use-github";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { formatRelative } from "@/lib/format";
 import { toErrorMessage } from "@/services/api";
 import type { GitHubImportResponse, GitHubRepositorySummary } from "@/types";
@@ -103,6 +104,7 @@ export default function GitHubRepositories() {
   const { projectId } = useParams<{ projectId: string }>();
   const { isDemoSession } = useAuth();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `GitHub — ${project.data.name}` : "GitHub Repositories");
   const status = useGitHubStatus();
   const boundary = useGitHubBoundary();
   const startConnect = useStartGitHubConnect();

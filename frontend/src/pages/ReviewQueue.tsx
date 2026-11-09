@@ -16,6 +16,7 @@ import { PageHeader, PanelSkeleton } from "@/components/common/PageHeader";
 import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useReviewQueue } from "@/hooks/use-memory";
 import {
   CLAIM_STATUS_META,
@@ -57,6 +58,7 @@ function HumanReviewBadge({ status }: { status: string }) {
 export default function ReviewQueue() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Review Queue — ${project.data.name}` : "Review Queue");
   const [params, setParams] = useSearchParams();
 
   const filter = (params.get("filter") as ReviewQueueFilter) || "all";

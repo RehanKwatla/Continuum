@@ -25,6 +25,7 @@ import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProject } from "@/hooks/use-projects";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useUploadSources } from "@/hooks/use-sources";
 import { formatBytes } from "@/lib/format";
 import { ALLOWED_UPLOAD_EXTENSIONS, UPLOAD_ACCEPT_ATTRIBUTE, isAllowedUpload } from "@/lib/source-meta";
@@ -41,6 +42,7 @@ interface RejectedFile {
 export default function UploadSources() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
+  usePageTitle(project.data ? `Upload — ${project.data.name}` : "Upload Sources");
   const upload = useUploadSources(projectId ?? "");
   const { toast } = useToast();
   const { isDemoSession } = useAuth();
