@@ -162,7 +162,7 @@ export default function Landing() {
               <Link to="/dashboard">Explore Demo</Link>
             </Button>
             <Button size="sm" asChild>
-              <Link to="/dashboard">Enter App</Link>
+              <Link to="/dashboard">Get Started</Link>
             </Button>
           </div>
         </div>
@@ -185,7 +185,7 @@ export default function Landing() {
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button size="lg" asChild>
                 <Link to="/dashboard">
-                  Explore Demo
+                  Get Started
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -332,7 +332,7 @@ export default function Landing() {
             </div>
             <Button size="lg" asChild>
               <Link to="/dashboard">
-                Explore the Demo
+                Get Started
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

@@ -73,12 +73,12 @@ export function AppRouter() {
         <Route path="/login" element={<Navigate to="/dashboard" replace />} />
         <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
 
-        {/* Optional marketing landing kept at /landing; root / directly opens Continuum */}
+        {/* Marketing landing kept at / and /landing */}
+        <Route path="/" element={<Landing />} />
         <Route path="/landing" element={<Landing />} />
 
         {/* All application routes open directly inside AppShell with no sign-in required */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
 
           <Route path="/projects" element={<Projects />} />
