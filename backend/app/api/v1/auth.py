@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.core.config import get_settings
 from app.core.dependencies import CurrentPrincipal, CurrentUser
 from app.core.security import DEMO_PROVIDER, DEV_PROVIDER
 from app.schemas.auth import AuthSessionResponse, UserProfile
@@ -17,11 +18,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _session(principal, user) -> AuthSessionResponse:
+    is_demo = principal.provider == DEMO_PROVIDER
     return AuthSessionResponse(
         user=UserProfile.model_validate(user),
         auth_provider=principal.provider,
         is_dev_session=principal.provider == DEV_PROVIDER,
-        is_demo_session=principal.provider == DEMO_PROVIDER,
+        is_demo_session=is_demo,
+        is_demo_read_only=is_demo and get_settings().public_demo_read_only,
     )
 
 

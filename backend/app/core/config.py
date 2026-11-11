@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from enum import Enum
 from functools import lru_cache
+import json
+from typing import Annotated
 
 from pydantic import field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Environment(str, Enum):
@@ -40,9 +42,10 @@ class Settings(BaseSettings):
     db_echo: bool = False
 
     # --- CORS ----------------------------------------------------------------
-    cors_origins: list[str] = [
+    cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://continui.vercel.app",
     ]
 
     # --- Supabase Auth -------------------------------------------------------
@@ -107,11 +110,29 @@ class Settings(BaseSettings):
         """True when a real model provider is usable (no key ⇒ no fabrication)."""
         return bool(self.gemini_api_key)
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_url(cls, value: object) -> object:
+        """Ensure PostgreSQL URLs from Render/Neon/Supabase use the psycopg3 driver."""
+        if not isinstance(value, str):
+            return value
+        url = value.strip()
+        if url.startswith("postgres://"):
+            return "postgresql+psycopg://" + url[len("postgres://") :]
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + url[len("postgresql://") :]
+        return url
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
         if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
+            stripped = value.strip()
+            if stripped.startswith("["):
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if str(item).strip()]
+            return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
 
     @property

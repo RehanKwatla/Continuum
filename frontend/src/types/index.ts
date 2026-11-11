@@ -123,6 +123,7 @@ export interface AuthSessionResponse {
   auth_provider: string;
   is_dev_session: boolean;
   is_demo_session?: boolean;
+  is_demo_read_only?: boolean;
 }
 
 export interface PublicDemoStatus {

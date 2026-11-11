@@ -36,7 +36,7 @@ export default function ProjectCreate() {
   const workspaces = useWorkspaces();
   const createProject = useCreateProject();
   const { toast } = useToast();
-  const { isDemoSession } = useAuth();
+  const { isDemoReadOnly } = useAuth();
 
   const [workspaceId, setWorkspaceId] = React.useState("");
   const [name, setName] = React.useState("");
@@ -100,7 +100,7 @@ export default function ProjectCreate() {
         }
       />
 
-      {isDemoSession ? (
+      {isDemoReadOnly ? (
         <Alert variant="default" className="border-primary/40 bg-primary/10">
           <div>
             <p className="text-xs font-semibold text-foreground">
@@ -229,9 +229,9 @@ export default function ProjectCreate() {
               </div>
 
               <div className="flex items-center gap-2 border-t border-border/70 pt-4">
-                  <Button type="submit" disabled={createProject.isPending || !name.trim() || isDemoSession}>
+                  <Button type="submit" disabled={createProject.isPending || !name.trim() || isDemoReadOnly}>
                     <FolderPlus className="h-4 w-4" />
-                    {isDemoSession
+                    {isDemoReadOnly
                       ? "Creation disabled in demo mode"
                       : createProject.isPending
                         ? "Creating…"

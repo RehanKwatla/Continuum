@@ -1,15 +1,22 @@
-# Render blueprint for the Continuum API.
+# Render blueprint for the Continuum API + PostgreSQL database.
 #
-# Values marked `sync: false` are set in the Render dashboard and are never
-# committed. Do NOT put real credentials in this file.
+# Optional secrets (GEMINI_API_KEY, GITHUB_TOKEN, SUPABASE_URL, etc.) can be
+# added in the Render Dashboard -> Environment tab after deployment without
+# blocking initial provisioning. Do NOT put real credentials in this file.
+databases:
+  - name: continuum-db
+    plan: free
+    databaseName: continuum
+    user: continuum
+
 services:
   - type: web
     name: continuum-api
     runtime: python
     plan: free
     rootDir: backend
-    # Migrations run as part of the release command so the schema is always
-    # current; the start command then binds to the port Render provides.
+    # Migrations run before starting uvicorn so the database schema is always
+    # current on every deploy.
     buildCommand: pip install -r requirements.txt
     startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
@@ -23,23 +30,12 @@ services:
       - key: PUBLIC_DEMO_MODE
         value: "true"
       - key: PUBLIC_DEMO_READ_ONLY
-        value: "true"
+        value: "false"
       - key: PYTHON_VERSION
         value: "3.12.6"
-      # Set in the dashboard: services.env.example documents every variable.
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: continuum-db
+          property: connectionString
       - key: CORS_ORIGINS
-        sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_JWT_SECRET
-        sync: false
-      - key: GITHUB_CLIENT_ID
-        sync: false
-      - key: GITHUB_CLIENT_SECRET
-        sync: false
-      - key: GITHUB_TOKEN_ENCRYPTION_KEY
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
+        value: https://continui.vercel.app,http://localhost:5173

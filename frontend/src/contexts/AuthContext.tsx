@@ -18,6 +18,7 @@ interface AuthContextValue {
   provider: string | null;
   isDevSession: boolean;
   isDemoSession: boolean;
+  isDemoReadOnly: boolean;
   /** Non-fatal problem encountered while resolving the session. */
   error: string | null;
   refresh: () => Promise<void>;
@@ -32,29 +33,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [provider, setProvider] = React.useState<string | null>(null);
   const [isDevSession, setIsDevSession] = React.useState(false);
   const [isDemoSession, setIsDemoSession] = React.useState(false);
+  const [isDemoReadOnly, setIsDemoReadOnly] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  const applySession = React.useCallback((session: Awaited<ReturnType<typeof fetchCurrentUser>>) => {
+    const isDemo = Boolean(session.is_demo_session || session.auth_provider === "demo");
+    setUser(session.user);
+    setProvider(session.auth_provider);
+    setIsDevSession(session.is_dev_session);
+    setIsDemoSession(isDemo);
+    setIsDemoReadOnly(
+      session.is_demo_read_only !== undefined ? session.is_demo_read_only : isDemo,
+    );
+    setError(null);
+    setStatus("authenticated");
+  }, []);
 
   const resolve = React.useCallback(async () => {
     try {
       const session = await fetchCurrentUser();
-      setUser(session.user);
-      setProvider(session.auth_provider);
-      setIsDevSession(session.is_dev_session);
-      setIsDemoSession(Boolean(session.is_demo_session || session.auth_provider === "demo"));
-      setError(null);
-      setStatus("authenticated");
+      applySession(session);
     } catch (caught) {
       // If a real token failed (expired or invalid), clear it and retry anonymously for public demo.
       if (getAccessToken()) {
         clearAccessToken();
         try {
           const session = await fetchCurrentUser();
-          setUser(session.user);
-          setProvider(session.auth_provider);
-          setIsDevSession(session.is_dev_session);
-          setIsDemoSession(Boolean(session.is_demo_session || session.auth_provider === "demo"));
-          setError(null);
-          setStatus("authenticated");
+          applySession(session);
           return;
         } catch {
           // Both token and anonymous attempts failed (e.g. backend unreachable)
@@ -64,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProvider(null);
       setIsDevSession(false);
       setIsDemoSession(false);
+      setIsDemoReadOnly(false);
       if (caught instanceof ApiClientError && caught.status === 503) {
         // recognised token but the backend has no verifier configured
         setError(caught.message);
@@ -72,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setStatus("unauthenticated");
     }
-  }, []);
+  }, [applySession]);
 
   // Boot: restore a Supabase session if present, then resolve the backend identity.
   React.useEffect(() => {
@@ -112,11 +118,12 @@ const value = React.useMemo<AuthContextValue>(
     provider,
     isDevSession,
     isDemoSession,
+    isDemoReadOnly,
     error,
     refresh: resolve,
     signOut,
   }),
-  [status, user, provider, isDevSession, isDemoSession, error, resolve, signOut],
+  [status, user, provider, isDevSession, isDemoSession, isDemoReadOnly, error, resolve, signOut],
 );
 
 return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -133,6 +140,7 @@ const DEFAULT_AUTH_VALUE: AuthContextValue = {
   provider: "demo",
   isDevSession: false,
   isDemoSession: false,
+  isDemoReadOnly: false,
   error: null,
   refresh: async () => { },
   signOut: async () => { },

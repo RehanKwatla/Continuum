@@ -138,7 +138,7 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function ProfileFooter() {
-  const { user, isDemoSession, signOut } = useAuth();
+  const { user, isDemoSession, isDemoReadOnly, signOut } = useAuth();
   const resetDemo = useResetPublicDemo();
   const { toast } = useToast();
   const [signingOut, setSigningOut] = React.useState(false);
@@ -186,7 +186,11 @@ function ProfileFooter() {
             {isDemoSession ? "Public Demo" : (user?.full_name ?? "Continuum user")}
           </p>
           <p className="truncate font-mono text-[10px] text-muted-foreground">
-            {isDemoSession ? "Judge access · Read-only" : user?.email}
+            {isDemoSession
+              ? isDemoReadOnly
+                ? "Judge access · Read-only"
+                : "Public workspace · Interactive"
+              : user?.email}
           </p>
         </div>
         {isDemoSession ? (

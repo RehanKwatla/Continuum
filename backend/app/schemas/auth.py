@@ -24,3 +24,4 @@ class AuthSessionResponse(BaseModel):
     auth_provider: str
     is_dev_session: bool = False
     is_demo_session: bool = False
+    is_demo_read_only: bool = False

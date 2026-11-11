@@ -45,7 +45,7 @@ export default function UploadSources() {
   usePageTitle(project.data ? `Upload — ${project.data.name}` : "Upload Sources");
   const upload = useUploadSources(projectId ?? "");
   const { toast } = useToast();
-  const { isDemoSession } = useAuth();
+  const { isDemoReadOnly } = useAuth();
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [files, setFiles] = React.useState<File[]>([]);
@@ -152,7 +152,7 @@ export default function UploadSources() {
 
       {projectId ? <ProjectWorkspaceNav projectId={projectId} /> : null}
 
-      {isDemoSession ? (
+      {isDemoReadOnly ? (
         <Alert variant="default" className="border-primary/40 bg-primary/10">
           <AlertTriangle className="h-4 w-4 text-primary" />
           <div>

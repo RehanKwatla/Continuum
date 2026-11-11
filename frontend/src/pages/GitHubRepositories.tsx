@@ -102,7 +102,7 @@ function OptionToggle({
 
 export default function GitHubRepositories() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { isDemoSession } = useAuth();
+  const { isDemoSession, isDemoReadOnly } = useAuth();
   const project = useProject(projectId);
   usePageTitle(project.data ? `GitHub — ${project.data.name}` : "GitHub Repositories");
   const status = useGitHubStatus();
@@ -278,7 +278,7 @@ export default function GitHubRepositories() {
         </Card>
       ) : null}
 
-      {isDemoSession && !connected ? (
+      {isDemoReadOnly && !connected ? (
         <Card className="border-primary/40 bg-primary/10">
           <CardHeader>
             <div className="flex items-center gap-2">
