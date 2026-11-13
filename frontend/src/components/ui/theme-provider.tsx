@@ -2,26 +2,35 @@ import * as React from "react";
 
 const THEME_STORAGE_KEY = "continuum.theme";
 
-type Theme = "light" | "dark" | "system";
+export type Theme = "light" | "dark" | "system";
 
-interface ThemeContextValue {
+export interface ThemeContextValue {
   theme: Theme;
   resolvedTheme: "light" | "dark";
+  isDark: boolean;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
 }
 
+const DEFAULT_THEME_VALUE: ThemeContextValue = {
+  theme: "dark",
+  resolvedTheme: "dark",
+  isDark: true,
+  setTheme: () => {},
+  toggleTheme: () => {},
+};
+
 const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 
-export function useTheme() {
+export function useTheme(): ThemeContextValue {
   const context = React.useContext(ThemeContext);
-  if (!context) throw new Error("useTheme must be used within a ThemeProvider");
+  if (!context) return DEFAULT_THEME_VALUE;
   return context;
 }
 
 export function ThemeProvider({
   children,
-  defaultTheme = "system",
+  defaultTheme = "dark",
 }: {
   children: React.ReactNode;
   defaultTheme?: Theme;
@@ -51,7 +60,9 @@ export function ThemeProvider({
         ? (media.matches ? "dark" : "light")
         : storedTheme;
       setResolvedTheme(effective);
-      document.documentElement.classList.toggle("dark", effective === "dark");
+      const isDark = effective === "dark";
+      document.documentElement.classList.toggle("dark", isDark);
+      document.documentElement.classList.toggle("light", !isDark);
     };
     resolve();
     media.addEventListener("change", resolve);
@@ -61,7 +72,9 @@ export function ThemeProvider({
   // Apply resolved theme whenever it changes.
   React.useEffect(() => {
     if (typeof document === "undefined") return;
-    document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
+    const isDark = resolvedTheme === "dark";
+    document.documentElement.classList.toggle("dark", isDark);
+    document.documentElement.classList.toggle("light", !isDark);
   }, [resolvedTheme]);
 
   const setTheme = React.useCallback(
@@ -77,11 +90,25 @@ export function ThemeProvider({
   );
 
   const toggleTheme = React.useCallback(() => {
-    setStoredTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  }, []);
+    const next: Theme = resolvedTheme === "dark" ? "light" : "dark";
+    setStoredTheme(next);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, [resolvedTheme]);
 
   return (
-    <ThemeContext.Provider value={{ theme: storedTheme, resolvedTheme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider
+      value={{
+        theme: storedTheme,
+        resolvedTheme,
+        isDark: resolvedTheme === "dark",
+        setTheme,
+        toggleTheme,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

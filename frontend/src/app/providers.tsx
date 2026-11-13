@@ -30,7 +30,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = React.useState(createQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="system">
+      <ThemeProvider defaultTheme="dark">
         <ToastProvider>
           <AuthProvider>{children}</AuthProvider>
         </ToastProvider>

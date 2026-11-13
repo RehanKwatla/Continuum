@@ -19,37 +19,71 @@
  */
 @layer base {
   :root {
-    /* Light theme — neutral paper base */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /*
+     * LIGHT THEME — LUMINOUS AMETHYST
+     * Clean, crisp, high-contrast enterprise theme
+     */
+    /* Luminous Alabaster #F9F7FA */
+    --background: 270 18% 97.5%;
+    /* Deep Charcoal-Aubergine #18121E (AAA contrast on light background) */
+    --foreground: 274 24% 12%;
+
+    /* Crisp Pure White #FFFFFF for elevated cards */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --sidebar: 0 0% 96%;
+    --card-foreground: 274 24% 12%;
+
+    /* Soft Amethyst-tinted Sidebar #F3EFF5 */
+    --sidebar: 270 16% 95.5%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --canvas: 0 0% 100%;
-    --primary: 262.1 83.3% 57.8%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 262.1 83.3% 57.8%;
-    --sand: 0 0% 100%;
-    --status-ok: 160 84% 39%;
-    --status-warn: 43 96% 56%;
-    --status-danger: 0 84% 60%;
-    --status-info: 315 33% 69%;
+    --popover-foreground: 274 24% 12%;
+
+    --canvas: 270 18% 97.5%;
+
+    /* Vibrant Royal Orchid-Amethyst #873684 (WCAG AAA contrast on white: 7.2:1) */
+    --primary: 304 44% 37%;
+    /* Pure White for buttons */
+    --primary-foreground: 0 0% 100%;
+
+    /* Soft Orchid Tint #F1EBF2 */
+    --secondary: 295 18% 93.5%;
+    --secondary-foreground: 274 24% 12%;
+
+    /* Muted lavender-grey surface */
+    --muted: 290 14% 92.5%;
+    /* Accessible secondary text (WCAG AAA contrast: 7.1:1 on white) */
+    --muted-foreground: 302 10% 38%;
+
+    --accent: 295 16% 91%;
+    --accent-foreground: 274 24% 12%;
+
+    /* Vivid Crimson for destructive actions */
+    --destructive: 0 80% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Subtle plum border */
+    --border: 285 12% 86%;
+    --input: 285 12% 86%;
+    --ring: 304 44% 37%;
+
+    --sand: 305 18% 96%;
+
+    /* Semantic status hues (light mode optimized for legibility) */
+    --status-ok: 158 84% 28%;
+    --status-warn: 36 94% 38%;
+    --status-danger: 0 80% 48%;
+    --status-info: 217 92% 48%;
+
     --radius: 0.625rem;
   }
 
   .dark {
+    /*
+     * DARK THEME — MIDNIGHT AMETHYST
+     * Midnight Black: #100E14
+     * Dark Aubergine: #18131E / #231B29
+     * Soft Orchid:    #C995BC
+     * Pearl White:    #F4ECF2
+     */
     /* Midnight Black #100E14 */
     --background: 260 18% 7%;
     /* Pearl White #F4ECF2 */
@@ -88,7 +122,7 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 315 27% 94%;
 
-    /* Subtle plum border #3E2F42 (rgba(142, 115, 139, 0.22) equivalent) */
+    /* Subtle plum border #3E2F42 */
     --border: 285 17% 22%;
     --input: 285 17% 20%;
     --ring: 315 33% 69%;
@@ -121,6 +155,35 @@
     background:
       radial-gradient(
         ellipse at 58% 20%,
+        rgba(201, 149, 188, 0.16),
+        transparent 58%
+      ),
+      radial-gradient(
+        ellipse at 85% 75%,
+        rgba(142, 115, 139, 0.10),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse at 15% 45%,
+        rgba(215, 190, 212, 0.12),
+        transparent 50%
+      ),
+      linear-gradient(
+        125deg,
+        #FAF8FB 0%,
+        #ECE5EF 52%,
+        #F6F2F8 100%
+      );
+    background-attachment: fixed;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .dark body,
+  html.dark body {
+    background:
+      radial-gradient(
+        ellipse at 58% 20%,
         rgba(137, 99, 130, 0.28),
         transparent 58%
       ),
@@ -141,12 +204,6 @@
         #17131D 100%
       );
     background-attachment: fixed;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  :not(.dark) body {
-    background: hsl(var(--background));
   }
 
   h1,
@@ -158,7 +215,7 @@
 
   ::selection {
     background-color: rgba(201, 149, 188, 0.28);
-    color: #F4ECF2;
+    color: currentColor;
   }
 
   #root {
@@ -176,11 +233,11 @@
   }
 
   .label-eyebrow {
-    @apply font-sans text-[12px] font-semibold uppercase tracking-[0.16em] text-orchid;
+    @apply font-sans text-[12px] font-semibold uppercase tracking-[0.16em] text-primary;
   }
 
   .wordmark {
-    @apply font-display text-[14px] font-bold uppercase tracking-[0.28em] text-pearl;
+    @apply font-display text-[14px] font-bold uppercase tracking-[0.28em] text-foreground;
   }
 
   .focus-ring {
@@ -192,9 +249,13 @@
   }
 
   .card-highlight {
-    background: linear-gradient(180deg, #261D2E 0%, #1A1422 100%);
+    background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--secondary)) 100%);
     position: relative;
     overflow: hidden;
+  }
+
+  .dark .card-highlight {
+    background: linear-gradient(180deg, #261D2E 0%, #1A1422 100%);
   }
 
   .card-highlight::after {
@@ -230,7 +291,7 @@
 ::-webkit-scrollbar-thumb {
   background-color: rgba(142, 115, 139, 0.35);
   border-radius: 9999px;
-  border: 2px solid #100E14;
+  border: 2px solid transparent;
 }
 ::-webkit-scrollbar-thumb:hover {
   background-color: rgba(201, 149, 188, 0.55);

@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Topbar } from "@/components/layout/Topbar";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { Tooltip } from "@/components/common/Tooltip";
 import { useToast } from "@/components/ui/toast";
 import { WorkspaceCreateDialog } from "@/components/common/WorkspaceCreateDialog";
@@ -184,7 +185,12 @@ function ProfileFooter() {
   };
 
   return (
-    <div className="border-t border-border p-3.5">
+    <div className="border-t border-border p-3.5 space-y-2.5">
+      <div className="flex items-center justify-between rounded-lg border border-border/70 bg-card/40 px-3 py-1.5">
+        <span className="text-xs font-medium text-muted-foreground">Theme</span>
+        <ThemeToggle size="sm" />
+      </div>
+
       <div className="flex items-center gap-3">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs font-bold uppercase text-primary shadow-sm">
           {label.slice(0, 1)}

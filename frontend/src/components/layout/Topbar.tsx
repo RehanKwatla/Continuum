@@ -63,7 +63,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-[#100E14]/85 px-4 backdrop-blur-md sm:px-6 lg:px-10">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-md sm:px-6 lg:px-10">
       <Button
         variant="ghost"
         size="icon"
@@ -146,6 +146,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
           </Badge>
         ) : null}
 
+        {/* Toggle switch in the UI/UX to change theme between dark and light */}
         <ThemeToggle />
 
         <DropdownMenu>
@@ -173,6 +174,11 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
               <ShieldCheck className="h-3.5 w-3.5 text-primary" />
               Mode: Frictionless Judge Access
             </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-border" />
+            <div className="flex items-center justify-between px-2 py-1.5 text-xs text-muted-foreground">
+              <span>Theme appearance</span>
+              <ThemeToggle size="sm" />
+            </div>
             <DropdownMenuSeparator className="bg-border" />
             {isDemoSession ? (
               <DropdownMenuItem
