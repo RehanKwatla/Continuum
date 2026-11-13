@@ -30,7 +30,7 @@ type Snapshot = {
 };
 type PageData = { items: Record<string, unknown>[]; total: number; page: number; page_size: number };
 const ACTIVE = new Set(["queued", "validating", "fetching_metadata", "fetching_branches", "fetching_tree", "fetching_files", "fetching_commits", "fetching_issues", "fetching_pull_requests", "saving_snapshot"]);
-const TABS = ["Overview", "Files", "Commits", "Issues", "Pull Requests", "Analysis", "Code Intelligence", "History Intelligence"] as const;
+const TABS = ["Overview", "Files", "Commits", "Issues", "Pull Requests", "Analysis", "Code Intelligence", "History Intelligence", "Knowledge"] as const;
 type Tab = (typeof TABS)[number];
 
 function pretty(value: string) {
@@ -60,6 +60,17 @@ export default function RepositoryIntelligence() {
   const [historyAnalysis, setHistoryAnalysis] = React.useState<Record<string, any> | null>(null);
   const [historyInsights, setHistoryInsights] = React.useState<Record<string, any>[]>([]);
   const [historyBusy, setHistoryBusy] = React.useState(false);
+  const [knowledgeRun, setKnowledgeRun] = React.useState<Record<string, any> | null>(null);
+  const [knowledgeOverview, setKnowledgeOverview] = React.useState<Record<string, any> | null>(null);
+  const [knowledgeUnits, setKnowledgeUnits] = React.useState<Record<string, any>[]>([]);
+  const [knowledgeGaps, setKnowledgeGaps] = React.useState<Record<string, any>[]>([]);
+  const [knowledgeConflicts, setKnowledgeConflicts] = React.useState<Record<string, any>[]>([]);
+  const [knowledgeProfile, setKnowledgeProfile] = React.useState<Record<string, any> | null>(null);
+  const [knowledgeGraph, setKnowledgeGraph] = React.useState<Record<string, any>>({ nodes: [], edges: [] });
+  const [selectedKnowledgeNode, setSelectedKnowledgeNode] = React.useState("");
+  const [knowledgeSearch, setKnowledgeSearch] = React.useState("");
+  const [knowledgeResults, setKnowledgeResults] = React.useState<Record<string, any> | null>(null);
+  const [knowledgeBusy, setKnowledgeBusy] = React.useState(false);
   const languageSummary = metadata
     ? Object.entries(metadata.languages).sort((left, right) => right[1] - left[1]).slice(0, 5).map(([name]) => name).join(", ")
     : "";
@@ -147,6 +158,34 @@ export default function RepositoryIntelligence() {
       .catch((caught) => setError(toErrorMessage(caught)));
   }, [repoId, tab, snapshot?.id]);
 
+  React.useEffect(() => {
+    if (!repoId || tab !== "Knowledge" || !snapshot) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const [overview, gaps, conflicts] = await Promise.all([
+          api.get<Record<string, any>>(`/repositories/${repoId}/knowledge/overview`, { params: { snapshot_id: snapshot.id } }),
+          api.get<{ items: Record<string, any>[] }>(`/repositories/${repoId}/knowledge/gaps`, { params: { snapshot_id: snapshot.id, page_size: 50 } }),
+          api.get<{ items: Record<string, any>[] }>(`/repositories/${repoId}/knowledge/conflicts`, { params: { snapshot_id: snapshot.id, page_size: 50 } }),
+        ]);
+        if (!active) return;
+        setKnowledgeOverview(overview.data); setKnowledgeRun(overview.data.analysis ?? null); setKnowledgeGaps(gaps.data.items); setKnowledgeConflicts(conflicts.data.items);
+        if (["completed", "partially_completed"].includes(String(overview.data.status))) {
+          const [units, profile, graph] = await Promise.all([
+            api.get<{ items: Record<string, any>[] }>(`/repositories/${repoId}/knowledge/units`, { params: { snapshot_id: snapshot.id, page_size: 50 } }),
+            api.get<Record<string, any>>(`/repositories/${repoId}/knowledge/profile`, { params: { snapshot_id: snapshot.id } }),
+            api.get<Record<string, any>>(`/repositories/${repoId}/knowledge/graph`, { params: { snapshot_id: snapshot.id, page: 1, page_size: 100 } }),
+          ]);
+          if (!active) return;
+          setKnowledgeUnits(units.data.items); setKnowledgeProfile(profile.data); setKnowledgeGraph(graph.data);
+        }
+      } catch (caught) { if (active) setError(toErrorMessage(caught)); }
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 2500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [repoId, tab, snapshot?.id]);
+
   async function startCodeAnalysis() {
     if (!repoId || !snapshot) return;
     setCodeBusy(true); setError("");
@@ -167,6 +206,34 @@ export default function RepositoryIntelligence() {
       setHistoryInsights(insights.data.items);
     } catch (caught) { setError(toErrorMessage(caught)); }
     finally { setHistoryBusy(false); }
+  }
+
+  async function startKnowledgeAnalysis() {
+    if (!repoId || !snapshot) return;
+    setKnowledgeBusy(true); setError("");
+    try {
+      const response = await api.post<Record<string, any>>(`/repositories/${repoId}/knowledge/analyse`, null, { params: { snapshot_id: snapshot.id } });
+      setKnowledgeRun(response.data);
+    } catch (caught) { setError(toErrorMessage(caught)); }
+    finally { setKnowledgeBusy(false); }
+  }
+
+  async function searchKnowledge() {
+    if (!repoId || !snapshot || knowledgeSearch.trim().length < 2) return;
+    setKnowledgeBusy(true); setError("");
+    try {
+      const response = await api.post<Record<string, any>>(`/repositories/${repoId}/knowledge/search`, { query: knowledgeSearch, snapshot_id: snapshot.id });
+      setKnowledgeResults(response.data);
+    } catch (caught) { setError(toErrorMessage(caught)); }
+    finally { setKnowledgeBusy(false); }
+  }
+
+  async function updateKnowledgeGap(gapId: string, status: string) {
+    if (!repoId) return;
+    try {
+      await api.post(`/repositories/${repoId}/knowledge/gaps/${gapId}/resolve`, { status });
+      setKnowledgeGaps((items) => items.map((gap) => gap.id === gapId ? { ...gap, status } : gap));
+    } catch (caught) { setError(toErrorMessage(caught)); }
   }
 
   async function validate() {
@@ -249,6 +316,24 @@ export default function RepositoryIntelligence() {
           <section><h3 className="mb-2 text-sm font-semibold">Commit summaries</h3><div className="space-y-2">{historyInsights.map((item) => <div key={item.commit_sha} className="rounded border p-3"><div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{pretty(item.category)}</Badge><Badge variant="outline">{item.confidence} confidence</Badge><code className="text-xs">{item.commit_sha.slice(0, 8)}</code></div><p className="mt-2 text-sm">{item.summary}</p>{item.signals?.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Signals: {item.signals.join(" · ")}</p>}</div>)}</div>{!historyInsights.length && <p className="text-sm text-muted-foreground">No commit insight records are available yet.</p>}</section>
           <p className="border-t pt-3 text-xs text-muted-foreground">History activity is observational evidence. It does not establish expertise, ownership, intent, neglect, or responsibility.</p>
         </>}</CardContent></Card>}
+      {tab === "Knowledge" && <div className="space-y-4">
+        <Card><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Project knowledge</CardTitle><p className="mt-1 text-sm text-muted-foreground">Reconstructing evidence from files, issues, pull requests, commits, and stored analysis for this snapshot.</p></div><Button onClick={() => void startKnowledgeAnalysis()} disabled={knowledgeBusy || ["queued", "running"].includes(String(knowledgeOverview?.status)) || !["completed", "partially_completed"].includes(snapshot.status)}>{knowledgeBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{["queued", "running"].includes(String(knowledgeOverview?.status)) ? `Indexing ${knowledgeOverview?.analysis?.progress ?? 0}%` : "Analyse project knowledge"}</Button></CardHeader><CardContent className="space-y-5">
+          {!knowledgeOverview || knowledgeOverview.status === "not_started" ? <p className="text-sm text-muted-foreground">Run knowledge analysis to index captured documentation and GitHub records with source citations.</p> : <>
+            {knowledgeOverview.status === "failed" && <Alert variant="destructive">{knowledgeOverview.analysis?.error_details ?? "Knowledge analysis failed."}</Alert>}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[["Knowledge units", knowledgeOverview.units], ["Open gaps", knowledgeOverview.gaps], ["Conflicts", knowledgeOverview.conflicts], ["Unverified assumptions", knowledgeOverview.assumptions]].map(([label, value]) => <div key={String(label)} className="rounded-md border p-3"><p className="text-xs text-muted-foreground">{String(label)}</p><p className="mt-1 text-xl font-semibold">{String(value ?? "—")}</p></div>)}</div>
+            <div className="rounded border p-3"><p className="text-sm font-medium">Source coverage</p><p className="mt-1 text-xs text-muted-foreground">{knowledgeOverview.coverage?.sources_processed ?? 0} processed · {knowledgeOverview.coverage?.sources_unavailable ?? 0} unavailable · {knowledgeOverview.coverage?.documents_truncated ?? 0} truncated · Issues {knowledgeOverview.coverage?.issues_in_snapshot ?? 0} · PRs {knowledgeOverview.coverage?.pull_requests_in_snapshot ?? 0} · Commits {knowledgeOverview.coverage?.commits_in_snapshot ?? 0}</p><p className="mt-1 text-xs text-muted-foreground">{knowledgeOverview.coverage?.method ?? "Coverage reflects captured snapshot sources; unavailable data is not treated as absent knowledge."}</p></div>
+            <section className="space-y-3"><div className="flex flex-wrap items-end gap-2"><div className="min-w-[220px] flex-1 space-y-1"><Label htmlFor="knowledge-query">Search indexed knowledge</Label><Input id="knowledge-query" value={knowledgeSearch} onChange={(event) => setKnowledgeSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void searchKnowledge(); }} placeholder="How is deployment configured?" /></div><Button variant="outline" disabled={knowledgeBusy || knowledgeSearch.trim().length < 2} onClick={() => void searchKnowledge()}><Search className="mr-2 h-4 w-4" />Search</Button></div>
+              {knowledgeResults && <div className="space-y-2 rounded border p-3"><p className="text-sm font-medium">{knowledgeResults.answer}</p>{knowledgeResults.items?.map((item: any) => <div key={item.id} className="border-t pt-2"><div className="flex flex-wrap gap-2"><Badge variant="secondary">{pretty(item.category)}</Badge><Badge variant="outline">{item.evidence_level}</Badge></div><p className="mt-1 font-medium">{item.title}</p><p className="whitespace-pre-wrap text-sm">{item.content}</p>{item.evidence?.map((e: any, index: number) => <p key={`${e.source}-${index}`} className="mt-1 text-xs text-muted-foreground">Evidence: {e.source_url ? <a href={e.source_url} target="_blank" rel="noreferrer" className="text-primary underline">{e.location || e.source}</a> : e.location || e.source} · {e.quote.slice(0, 300)}</p>)}</div>)}{knowledgeResults.conflicts?.map((conflict: any) => <Alert key={conflict.id}>Conflicting evidence: {conflict.claim_a} / {conflict.claim_b}</Alert>)}</div>}
+            </section>
+            <section><h3 className="mb-2 text-sm font-semibold">Knowledge units</h3><div className="max-h-[460px] space-y-2 overflow-auto">{knowledgeUnits.map((unit) => <details key={unit.id} className="rounded border p-3"><summary className="cursor-pointer"><span className="font-medium">{unit.title}</span><span className="ml-2 text-xs text-muted-foreground">{pretty(unit.category)} · {unit.evidence_level} · {Math.round(unit.confidence * 100)}%</span></summary><p className="mt-2 whitespace-pre-wrap text-sm">{unit.content}</p>{unit.evidence?.map((e: any, index: number) => <p key={`${e.source_id}-${index}`} className="mt-2 text-xs text-muted-foreground">{e.source_url ? <a href={e.source_url} target="_blank" rel="noreferrer" className="text-primary underline">{e.source_location || e.source_name}</a> : e.source_location || e.source_name} · {e.quote.slice(0, 300)}</p>)}</details>)}{!knowledgeUnits.length && knowledgeOverview.status === "completed" && <p className="text-sm text-muted-foreground">No source excerpts met the bounded extraction rules.</p>}</div></section>
+            <section><h3 className="mb-2 text-sm font-semibold">Evidence graph</h3>{knowledgeGraph.nodes?.length ? <div className="overflow-auto rounded border p-2"><svg viewBox={`0 0 760 ${Math.max(260, knowledgeGraph.nodes.length * 34)}`} className="min-w-[640px] w-full" onWheel={(event) => { event.preventDefault(); setGraphZoom((value) => Math.min(1.8, Math.max(0.65, value + (event.deltaY < 0 ? 0.1 : -0.1)))); }}><g transform={`scale(${graphZoom})`}>{knowledgeGraph.edges.map((edge: any, index: number) => { const a = knowledgeGraph.nodes.findIndex((node: any) => node.id === edge.source); const b = knowledgeGraph.nodes.findIndex((node: any) => node.id === edge.target); if (a < 0 || b < 0) return null; const ax = knowledgeGraph.nodes[a].type === "repository" ? 90 : knowledgeGraph.nodes[a].type === "source" ? 660 : 360; const bx = knowledgeGraph.nodes[b].type === "repository" ? 90 : knowledgeGraph.nodes[b].type === "source" ? 660 : 360; return <line key={`${edge.source}-${edge.target}-${index}`} x1={ax} y1={22 + a * 34} x2={bx} y2={22 + b * 34} stroke={selectedKnowledgeNode && edge.source !== selectedKnowledgeNode && edge.target !== selectedKnowledgeNode ? "#c6c4bd" : "#2F6BFF"} strokeWidth="1.5" />; })}{knowledgeGraph.nodes.map((node: any, index: number) => { const x = node.type === "repository" ? 90 : node.type === "source" ? 660 : 360; return <g key={node.id} role="button" tabIndex={0} onClick={() => setSelectedKnowledgeNode(node.id)} onKeyDown={(event) => { if (event.key === "Enter") setSelectedKnowledgeNode(node.id); }}><circle cx={x} cy={22 + index * 34} r="7" fill={selectedKnowledgeNode === node.id ? "#2F6BFF" : node.type === "knowledge_unit" ? "#D8CBB3" : "#1E1E1C"} /><text x={x + 12} y={26 + index * 34} fontSize="10" fill="currentColor">{node.label.slice(0, 44)}</text></g>; })}</g></svg><p className="mt-1 text-xs text-muted-foreground">Click a node to inspect it · scroll to zoom · {knowledgeGraph.total} total entities, showing {knowledgeGraph.nodes.length}. Edges carry source evidence; the graph is bounded to one page.</p>{selectedKnowledgeNode && <p className="mt-2 rounded bg-muted p-2 text-xs">{knowledgeGraph.nodes.find((node: any) => node.id === selectedKnowledgeNode)?.type}: {knowledgeGraph.nodes.find((node: any) => node.id === selectedKnowledgeNode)?.reference}</p>}</div> : <p className="text-sm text-muted-foreground">The evidence graph will appear after analysis finds source-backed knowledge units.</p>}</section>
+            <section><h3 className="mb-2 text-sm font-semibold">Knowledge gaps</h3><div className="space-y-2">{knowledgeGaps.map((gap) => <div key={gap.id} className="rounded border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{gap.title}</p><Badge variant="outline">{pretty(gap.status)}</Badge></div><p className="mt-1 text-sm">{gap.description}</p><p className="mt-1 text-xs text-muted-foreground">Why it matters: {gap.why_it_matters}</p><p className="mt-1 text-xs">Suggested question: {gap.recommended_question}</p><div className="mt-2 flex flex-wrap gap-2">{["under_review", "answered", "resolved", "dismissed"].map((status) => <Button key={status} size="sm" variant="outline" onClick={() => void updateKnowledgeGap(String(gap.id), status)}>{pretty(status)}</Button>)}</div></div>)}{!knowledgeGaps.length && <p className="text-sm text-muted-foreground">No contextual knowledge gaps were identified in the captured sources.</p>}</div></section>
+            <section><h3 className="mb-2 text-sm font-semibold">Conflicting claims</h3><div className="space-y-2">{knowledgeConflicts.map((conflict) => <div key={conflict.id} className="grid gap-2 rounded border p-3 md:grid-cols-2"><div><Badge variant="outline">Source A</Badge><p className="mt-1 text-sm">{conflict.claim_a}</p><p className="text-xs text-muted-foreground">{conflict.evidence_a?.source} · {conflict.evidence_a?.source_timestamp}</p></div><div><Badge variant="outline">Source B</Badge><p className="mt-1 text-sm">{conflict.claim_b}</p><p className="text-xs text-muted-foreground">{conflict.evidence_b?.source} · {conflict.evidence_b?.source_timestamp}</p></div><p className="text-xs text-muted-foreground md:col-span-2">Possible explanation: {conflict.possible_explanation} · {Math.round(conflict.confidence * 100)}% signal strength. No side was automatically selected.</p></div>)}{!knowledgeConflicts.length && <p className="text-sm text-muted-foreground">No supported documentation/configuration conflicts were identified.</p>}</div></section>
+            <section><h3 className="mb-2 text-sm font-semibold">Successor knowledge profile</h3><div className="grid gap-2 md:grid-cols-2">{(knowledgeProfile?.sections ?? []).map((section: any) => <details key={section.section} className="rounded border p-3"><summary className="cursor-pointer font-medium">{pretty(section.section)} · {section.items.length}</summary><div className="mt-2 space-y-2">{section.items.slice(0, 8).map((item: any) => <div key={item.id} className="border-t pt-2"><p className="text-sm font-medium">{item.title}</p><p className="whitespace-pre-wrap text-xs text-muted-foreground">{item.content?.slice(0, 500)}</p></div>)}{section.evidence?.slice(0, 12).map((e: any, index: number) => <p key={`${e.unit_id}-${index}`} className="border-t pt-2 text-xs text-muted-foreground">Evidence for {e.title}: {e.source_url ? <a href={e.source_url} target="_blank" rel="noreferrer" className="text-primary underline">{e.source}</a> : e.source} · {e.evidence_level} · {e.quote.slice(0, 240)}</p>)}</div></details>)}</div></section>
+            <p className="border-t pt-3 text-xs text-muted-foreground">Deterministic evidence excerpts only · no semantic embeddings configured · source timestamps and completeness do not establish that knowledge is current or complete.</p>
+          </>}
+        </CardContent></Card>
+      </div>}
       {["Files", "Commits", "Issues", "Pull Requests"].includes(tab) && <Card><CardHeader><CardTitle>{tab}</CardTitle></CardHeader><CardContent className="space-y-3">
         {!data ? <p className="text-sm text-muted-foreground">Loading repository records…</p> : data.items.length === 0 ? <p className="text-sm text-muted-foreground">No {tab.toLowerCase()} have been saved for this snapshot.</p> : data.items.map((row, index) => <div key={String(row.id ?? index)} className="rounded-md border p-3"><p className="font-medium">{String(row.path ?? row.title ?? row.message ?? row.commit_sha ?? "Repository item")}</p><p className="mt-1 text-xs text-muted-foreground">{String(row.analysis_status ?? row.state ?? row.committed_at ?? row.author_name ?? "")}</p>{row.skip_reason !== undefined && row.skip_reason !== null && <p className="mt-1 text-xs text-amber-700">{String(row.skip_reason)}</p>}</div>)}
         {data && data.total > data.page_size && <div className="flex items-center justify-between"><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</Button><span className="text-xs text-muted-foreground">Page {data.page} · {data.total} records</span><Button variant="outline" size="sm" disabled={page * data.page_size >= data.total} onClick={() => setPage((current) => current + 1)}>Next</Button></div>}

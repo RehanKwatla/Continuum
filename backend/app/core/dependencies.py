@@ -205,6 +205,12 @@ def public_demo_write_guard(request: Request) -> None:
         return
     if re.fullmatch(r"/api/v1/repositories/[0-9a-fA-F-]{36}/history-analysis", path):
         return
+    if re.fullmatch(r"/api/v1/repositories/[0-9a-fA-F-]{36}/knowledge/analyse", path):
+        return
+    if re.fullmatch(r"/api/v1/repositories/[0-9a-fA-F-]{36}/knowledge/search", path):
+        return
+    if re.fullmatch(r"/api/v1/repositories/[0-9a-fA-F-]{36}/knowledge/gaps/[0-9a-fA-F-]{36}/resolve", path):
+        return
     raise ForbiddenError(
         "The public demonstration environment is read-only. "
         "Browsing, inspection, demo reset, and the designated public repository analysis flow are available; other changes are disabled.",

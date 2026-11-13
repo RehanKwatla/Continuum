@@ -49,6 +49,10 @@ from app.models.code_intelligence import (
     TechnologyDetection,
 )
 from app.models.git_history import CommitFileChange, CommitInsight, HistoryAnalysisRun
+from app.models.repository_knowledge import (
+    KnowledgeAnalysisRun, KnowledgeEntity, KnowledgeEvidence, KnowledgeGap,
+    KnowledgeConflict, KnowledgeRelationship, KnowledgeUnit, ProjectAssumption,
+)
 from app.models.evidence import Evidence
 from app.models.evidence_span import EvidenceSpan
 from app.models.github_connection import GitHubConnection
@@ -82,6 +86,14 @@ __all__ = [
     "CommitFileChange",
     "CommitInsight",
     "HistoryAnalysisRun",
+    "KnowledgeAnalysisRun",
+    "KnowledgeConflict",
+    "KnowledgeEntity",
+    "KnowledgeEvidence",
+    "KnowledgeGap",
+    "KnowledgeRelationship",
+    "KnowledgeUnit",
+    "ProjectAssumption",
     "ArchitectureComponent",
     "CodeAnalysisRun",
     "CodeAnalysisStatus",
