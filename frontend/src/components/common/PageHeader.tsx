@@ -21,7 +21,7 @@ export function PageHeader({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1.5">
           {eyebrow ? <p className="label-eyebrow">{eyebrow}</p> : null}
-          <h1 className="font-display text-3xl font-medium tracking-tight text-sand sm:text-[2rem] sm:leading-tight">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-[2rem] sm:leading-tight">
             {title}
           </h1>
           {description ? (
@@ -30,7 +30,7 @@ export function PageHeader({
             </div>
           ) : null}
         </div>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 items-center gap-2.5">{actions}</div> : null}
       </div>
     </div>
   );
@@ -48,12 +48,12 @@ export function MetricTile({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="border-b border-border py-4 sm:border-b-0 sm:border-r sm:px-5 sm:py-1 sm:last:border-r-0">
+    <div className="border-b border-border p-5 sm:border-b-0 sm:border-r sm:last:border-r-0 transition-colors hover:bg-card/80">
       <div className="flex items-start justify-between gap-3">
-        <p className="label-eyebrow">{label}</p>
+        <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-primary">{label}</p>
         {icon ? <span className="text-muted-foreground/80">{icon}</span> : null}
       </div>
-      <p className="mt-3 font-display text-3xl font-medium tabular-nums tracking-tight text-sand">
+      <p className="mt-3 font-display text-3xl font-bold tabular-nums tracking-tight text-foreground">
         {value}
       </p>
       {hint ? <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}

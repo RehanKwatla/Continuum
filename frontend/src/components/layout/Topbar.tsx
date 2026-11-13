@@ -62,11 +62,11 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-canvas/90 px-4 backdrop-blur-sm sm:px-6 lg:px-10">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-[#100E14]/85 px-4 backdrop-blur-md sm:px-6 lg:px-10">
       <Button
         variant="ghost"
         size="icon"
-        className="lg:hidden"
+        className="lg:hidden text-muted-foreground hover:text-foreground"
         onClick={onOpenNav}
         aria-label="Open navigation"
       >
@@ -82,8 +82,8 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
         </svg>
       </Button>
 
-      <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 sm:flex">
-        <Link to="/dashboard" className="text-xs text-muted-foreground hover:text-foreground">
+      <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-2 sm:flex">
+        <Link to="/dashboard" className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
           Continuum
         </Link>
         {segments.map((segment, index) => {
@@ -92,15 +92,15 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
           const label = segment.length > 14 ? `${segment.slice(0, 8)}…` : segment;
           return (
             <React.Fragment key={href}>
-              <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />
               {isLast ? (
-                <span className="truncate text-xs font-medium capitalize text-foreground">
+                <span className="truncate text-xs font-semibold capitalize text-foreground">
                   {label}
                 </span>
               ) : (
                 <Link
                   to={href}
-                  className="truncate text-xs capitalize text-muted-foreground hover:text-foreground"
+                  className="truncate text-xs capitalize text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {label}
                 </Link>
@@ -115,16 +115,16 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
           className="hidden sm:inline-flex"
           label={health.data ? `API v${health.data.version}` : "API unreachable"}
         >
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Server className="h-3.5 w-3.5" />
             <span
               className={cn(
-                "h-1.5 w-1.5 rounded-full",
+                "h-2 w-2 rounded-full",
                 health.isSuccess
-                  ? "bg-status-ok"
+                  ? "bg-emerald-400"
                   : health.isError
-                    ? "bg-status-danger"
-                    : "bg-status-warn",
+                    ? "bg-rose-400"
+                    : "bg-amber-400",
               )}
             />
             {health.isSuccess ? "API online" : health.isError ? "API offline" : "Checking…"}
@@ -134,59 +134,59 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
         {/* Small unobtrusive label demanded by judge access requirements */}
         <Badge
           variant="outline"
-          className="border-primary/40 bg-primary/10 text-primary font-mono text-[10px] tracking-wider uppercase"
+          className="border-primary/40 bg-primary/10 text-primary font-mono text-[11px] font-semibold tracking-wider uppercase px-2.5 py-0.5"
         >
           PUBLIC DEMO ENVIRONMENT
         </Badge>
 
         {isDevSession ? (
-          <Badge variant="warn" className="hidden sm:inline-flex">
+          <Badge variant="warn" className="hidden sm:inline-flex text-[11px]">
             Development session
           </Badge>
         ) : null}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2 px-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-secondary text-[10px] font-semibold uppercase">
+            <Button variant="ghost" size="sm" className="gap-2.5 px-2.5 hover:bg-secondary">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-xs font-bold uppercase text-primary shadow-sm">
                 {(user?.full_name ?? user?.email ?? "D").slice(0, 1)}
               </span>
-              <span className="hidden max-w-[160px] truncate text-xs sm:inline">
+              <span className="hidden max-w-[160px] truncate text-xs font-medium text-foreground sm:inline">
                 {user?.full_name ?? (isDemoSession ? "Public Demo" : "Account")}
               </span>
             </Button>
           </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel className="space-y-0.5">
-                <span className="block truncate text-xs font-medium text-foreground">
-                  {user?.full_name ?? (isDemoSession ? "Public Demo" : "Continuum user")}
-                </span>
-                <span className="block truncate text-[11px] font-normal text-muted-foreground">
-                  {user?.email ?? "public-demo@example.com"}
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-                <DropdownMenuLabel className="flex items-center gap-2 font-normal text-xs text-muted-foreground">
-                  <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                  Mode: Frictionless Judge Access
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {isDemoSession ? (
-                  <DropdownMenuItem
-                    onSelect={() => void handleResetDemo()}
-                    disabled={resetDemo.isPending}
-                    className="cursor-pointer text-xs"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5 mr-2" />
-                    {resetDemo.isPending ? "Resetting demo…" : "Reset demo workspace to pristine"}
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem onSelect={() => void handleSignOut()} disabled={signingOut}>
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    {signingOut ? "Refreshing…" : "Switch to public demo"}
-                  </DropdownMenuItem>
-                )}
-            </DropdownMenuContent>
+          <DropdownMenuContent align="end" className="w-64 border-border bg-card shadow-xl">
+            <DropdownMenuLabel className="space-y-0.5">
+              <span className="block truncate text-xs font-medium text-foreground">
+                {user?.full_name ?? (isDemoSession ? "Public Demo" : "Continuum user")}
+              </span>
+              <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                {user?.email ?? "public-demo@example.com"}
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuLabel className="flex items-center gap-2 font-normal text-xs text-muted-foreground">
+              <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+              Mode: Frictionless Judge Access
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-border" />
+            {isDemoSession ? (
+              <DropdownMenuItem
+                onSelect={() => void handleResetDemo()}
+                disabled={resetDemo.isPending}
+                className="cursor-pointer text-xs hover:bg-secondary"
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                {resetDemo.isPending ? "Resetting demo…" : "Reset demo workspace to pristine"}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={() => void handleSignOut()} disabled={signingOut} className="cursor-pointer text-xs hover:bg-secondary">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                {signingOut ? "Refreshing…" : "Switch to public demo"}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>

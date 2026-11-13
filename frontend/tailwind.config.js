@@ -53,6 +53,26 @@ export default {
         sand: "hsl(var(--sand))",
         sidebar: "hsl(var(--sidebar))",
         canvas: "hsl(var(--canvas))",
+        // Midnight Amethyst direct tokens
+        orchid: {
+          DEFAULT: "#C995BC",
+          hover: "#DBA8CE",
+          soft: "rgba(201, 149, 188, 0.16)",
+          line: "rgba(201, 149, 188, 0.35)",
+        },
+        aubergine: {
+          DEFAULT: "#18131E",
+          deep: "#100E14",
+          elevated: "#261D2E",
+          surface: "#231B29",
+        },
+        plum: {
+          DEFAULT: "#8E738B",
+          border: "rgba(142, 115, 139, 0.22)",
+          soft: "rgba(142, 115, 139, 0.14)",
+        },
+        pearl: "#F4ECF2",
+        mauve: "#51404F",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -61,6 +81,7 @@ export default {
       },
       fontFamily: {
         sans: [
+          "Plus Jakarta Sans",
           "Inter",
           "ui-sans-serif",
           "system-ui",
@@ -71,8 +92,16 @@ export default {
           "Arial",
           "sans-serif",
         ],
-        display: ["Manrope", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: [
+          "Plus Jakarta Sans",
+          "Manrope",
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
+        ],
         mono: [
+          "IBM Plex Mono",
           "JetBrains Mono",
           "ui-monospace",
           "SFMono-Regular",

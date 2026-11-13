@@ -82,7 +82,7 @@ function HeroPreview() {
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
             Preview
           </p>
-          <p className="mt-1 text-sm text-sand">Payments service</p>
+          <p className="mt-1 text-sm font-medium text-foreground">Payments service</p>
         </div>
         <span className="font-mono text-[10px] uppercase tracking-wider text-primary">Active</span>
       </div>
@@ -172,7 +172,7 @@ export default function Landing() {
         <section className="mx-auto grid max-w-[1180px] gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-center lg:px-8 lg:py-24">
           <div>
             <p className="label-eyebrow">Project continuity, reimagined.</p>
-            <h1 className="mt-5 font-display text-5xl font-medium leading-[0.95] tracking-tight text-sand sm:text-6xl">
+            <h1 className="mt-5 font-display text-5xl font-bold leading-[0.95] tracking-tight text-foreground sm:text-6xl">
               People leave.
               <br />
               Knowledge stays.
@@ -203,13 +203,13 @@ export default function Landing() {
         <section className="border-t border-border">
           <div className="mx-auto max-w-[1180px] px-4 py-16 sm:px-6 lg:px-8">
             <p className="label-eyebrow">The problem</p>
-            <h2 className="mt-3 max-w-xl font-display text-3xl font-medium tracking-tight text-sand">
+            <h2 className="mt-3 max-w-xl font-display text-3xl font-bold tracking-tight text-foreground">
               Project memory is scattered, then it leaves with the person who held it.
             </h2>
             <div className="mt-10 grid gap-px bg-border sm:grid-cols-3">
               {PROBLEMS.map((item) => (
-                <article key={item.title} className="bg-background p-6">
-                  <h3 className="font-display text-lg font-medium text-sand">{item.title}</h3>
+                <article key={item.title} className="bg-card p-6 rounded-lg">
+                  <h3 className="font-display text-lg font-semibold text-foreground">{item.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.body}</p>
                 </article>
               ))}
@@ -220,14 +220,14 @@ export default function Landing() {
         <section id="how-it-works" className="border-t border-border">
           <div className="mx-auto max-w-[1180px] px-4 py-16 sm:px-6 lg:px-8">
             <p className="label-eyebrow">How Continuum works</p>
-            <h2 className="mt-3 font-display text-3xl font-medium tracking-tight text-sand">
+            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground">
               Connect → Reconstruct → Verify → Review → Handover
             </h2>
             <ol className="mt-10 grid gap-4 md:grid-cols-5">
               {WORKFLOW.map((stage, index) => (
                 <li key={stage.label} className="border-t border-border pt-4">
                   <span className="font-mono text-[11px] text-primary">0{index + 1}</span>
-                  <h3 className="mt-3 font-display text-lg font-medium text-sand">{stage.label}</h3>
+                  <h3 className="mt-3 font-display text-lg font-semibold text-foreground">{stage.label}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{stage.detail}</p>
                 </li>
               ))}
@@ -239,7 +239,7 @@ export default function Landing() {
           <div className="mx-auto grid max-w-[1180px] gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8">
             <div>
               <p className="label-eyebrow">Evidence</p>
-              <h2 className="mt-3 font-display text-3xl font-medium tracking-tight text-sand">
+              <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground">
                 A claim is only as strong as the record behind it.
               </h2>
               <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
@@ -277,14 +277,14 @@ export default function Landing() {
         <section className="border-t border-border">
           <div className="mx-auto max-w-[1180px] px-4 py-16 sm:px-6 lg:px-8">
             <p className="label-eyebrow">Capabilities</p>
-            <h2 className="mt-3 font-display text-3xl font-medium tracking-tight text-sand">
+            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground">
               What the platform does now
             </h2>
             <div className="mt-10 grid gap-4 sm:grid-cols-2">
               {CAPABILITIES.map(({ Icon, title, body }) => (
                 <article key={title} className="panel p-5">
                   <Icon className="h-4 w-4 text-primary" />
-                  <h3 className="mt-4 font-display text-lg font-medium text-sand">{title}</h3>
+                  <h3 className="mt-4 font-display text-lg font-semibold text-foreground">{title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
                 </article>
               ))}
@@ -296,7 +296,7 @@ export default function Landing() {
           <div className="mx-auto grid max-w-[1180px] gap-8 px-4 py-16 sm:px-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:px-8">
             <div>
               <p className="label-eyebrow">Security and privacy</p>
-              <h2 className="mt-3 font-display text-3xl font-medium tracking-tight text-sand">
+              <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground">
                 Access stays where it was granted.
               </h2>
             </div>
@@ -322,7 +322,7 @@ export default function Landing() {
         <section className="border-t border-border">
           <div className="mx-auto flex max-w-[1180px] flex-col items-start justify-between gap-6 px-4 py-16 sm:px-6 lg:flex-row lg:items-end lg:px-8">
             <div>
-              <h2 className="font-display text-4xl font-medium tracking-tight text-sand">
+              <h2 className="font-display text-4xl font-bold tracking-tight text-foreground">
                 Keep the knowledge.
               </h2>
               <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">

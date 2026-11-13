@@ -43,7 +43,7 @@ export function ProjectWorkspaceNav({ projectId }: { projectId: string }) {
 
   return (
     <div className="border-b border-border">
-      <nav aria-label="Project" className="-mb-px flex gap-1 overflow-x-auto">
+      <nav aria-label="Project" className="-mb-px flex gap-1.5 overflow-x-auto pb-1">
         {TABS.map((tab) => {
           const active = isTabActive(tab.id, projectId, location.pathname);
           return (
@@ -51,10 +51,10 @@ export function ProjectWorkspaceNav({ projectId }: { projectId: string }) {
               key={tab.id}
               to={tab.to(projectId)}
               className={cn(
-                "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors",
+                "inline-flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
                 active
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
+                  ? "bg-primary/15 text-foreground border-b-2 border-primary shadow-sm"
+                  : "border-b-2 border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
               )}
               aria-current={active ? "page" : undefined}
             >

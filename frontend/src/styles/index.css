@@ -3,63 +3,76 @@
 @tailwind utilities;
 
 /*
- * Continuum — charcoal canvas, sand type, electric blue for action only.
- * Dark is the only shipping theme.
+ * CONTINUUM — THEME 4: MIDNIGHT AMETHYST
+ * Enterprise Project Knowledge Continuity & Handover Platform
+ *
+ * Primary Foundation:
+ *   Midnight Black:      #100E14 (Canvas & Base)
+ *   Dark Aubergine:      #18131E / #231B29 / #28212D (Cards & Panels)
+ *   Dusty Mauve:         #51404F (Ambient Radial Atmospheres)
+ *   Muted Plum:          #8E738B (Borders & Dividers)
+ *   Soft Orchid:         #C995BC (Primary Action & Active Highlights)
+ *   Pearl White:         #F4ECF2 (Headings & Primary Metrics)
+ *   Secondary Text:      #D0C0CC (Body Text & Descriptions)
+ *   Muted Lavender-Grey: #A698A6 (Kickers, Badges & Secondary Metadata)
+ *   Dark Text:           #17101A (High-Contrast Text on Soft Orchid)
  */
 @layer base {
   :root,
   .dark {
-    /* Charcoal #1E1E1C */
-    --background: 60 3% 11%;
-    /* Pale sand for body copy */
-    --foreground: 38 36% 86%;
+    /* Midnight Black #100E14 */
+    --background: 260 18% 7%;
+    /* Pearl White #F4ECF2 */
+    --foreground: 315 27% 94%;
 
-    /* Elevated charcoal #252522 */
-    --card: 60 4% 14%;
-    --card-foreground: 38 36% 86%;
+    /* Dark Aubergine #18131E - distinctly darker than glowing background */
+    --card: 267 22% 10%;
+    --card-foreground: 315 27% 94%;
 
-    /* Deep charcoal #151513 */
-    --sidebar: 60 5% 8%;
-    --popover: 60 5% 9%;
-    --popover-foreground: 38 36% 86%;
+    /* Deep Aubergine / Midnight Sidebar #0E0C12 */
+    --sidebar: 260 20% 6%;
+    --popover: 267 22% 10%;
+    --popover-foreground: 315 27% 94%;
 
-    /* Slightly lifted main canvas */
-    --canvas: 60 3% 12%;
+    /* Lifted canvas foundation */
+    --canvas: 260 18% 7%;
 
-    /* Electric blue #2F6BFF */
-    --primary: 223 100% 59%;
-    --primary-foreground: 40 40% 94%;
+    /* Soft Orchid #C995BC */
+    --primary: 315 33% 69%;
+    /* Dark Aubergine #17101A (WCAG AAA > 7.5:1 contrast) */
+    --primary-foreground: 282 24% 8%;
 
-    /* Soft charcoal #30302C */
-    --secondary: 60 4% 18%;
-    --secondary-foreground: 38 28% 88%;
+    /* Dark Aubergine Elevated #231B29 */
+    --secondary: 274 21% 13%;
+    --secondary-foreground: 315 27% 94%;
 
-    --muted: 60 4% 16%;
-    /* Muted text #AAA69E */
-    --muted-foreground: 40 6% 64%;
+    /* Muted aubergine surface */
+    --muted: 272 23% 15%;
+    /* Secondary text #D0C0CC */
+    --muted-foreground: 315 14% 78%;
 
-    --accent: 60 4% 18%;
-    --accent-foreground: 38 36% 90%;
+    --accent: 274 21% 14%;
+    --accent-foreground: 315 27% 94%;
 
-    /* Muted red */
-    --destructive: 4 46% 46%;
-    --destructive-foreground: 40 40% 96%;
+    /* Rose red for destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 315 27% 94%;
 
-    /* Border #3A3934 */
-    --border: 50 6% 22%;
-    --input: 50 5% 24%;
-    --ring: 223 100% 59%;
+    /* Subtle plum border #3E2F42 (rgba(142, 115, 139, 0.22) equivalent) */
+    --border: 285 17% 22%;
+    --input: 285 17% 20%;
+    --ring: 315 33% 69%;
 
-    /* Sand #D8CBB3 */
-    --sand: 39 32% 77%;
+    /* Sand maps to Pearl White in Midnight Amethyst */
+    --sand: 315 27% 94%;
 
-    /* Restrained status hues — not the interaction blue */
-    --status-ok: 152 24% 42%;
-    --status-warn: 36 42% 48%;
-    --status-danger: 4 48% 50%;
-    --status-info: 188 22% 44%;
+    /* Semantic status hues */
+    --status-ok: 160 84% 39%;
+    --status-warn: 43 96% 56%;
+    --status-danger: 0 84% 60%;
+    --status-info: 315 33% 69%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
   }
 
   * {
@@ -74,7 +87,31 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply text-foreground font-sans antialiased;
+    background:
+      radial-gradient(
+        ellipse at 58% 20%,
+        rgba(137, 99, 130, 0.28),
+        transparent 58%
+      ),
+      radial-gradient(
+        ellipse at 85% 75%,
+        rgba(98, 69, 101, 0.16),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse at 15% 45%,
+        rgba(81, 64, 79, 0.18),
+        transparent 50%
+      ),
+      linear-gradient(
+        125deg,
+        #100E14 0%,
+        #352A38 52%,
+        #17131D 100%
+      );
+    background-attachment: fixed;
+    min-height: 100vh;
     overflow-x: hidden;
   }
 
@@ -82,12 +119,12 @@
   h2,
   h3,
   .font-display {
-    font-family: Manrope, Inter, ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', Manrope, Inter, ui-sans-serif, system-ui, sans-serif;
   }
 
   ::selection {
-    background-color: hsl(var(--primary) / 0.28);
-    color: hsl(var(--foreground));
+    background-color: rgba(201, 149, 188, 0.28);
+    color: #F4ECF2;
   }
 
   #root {
@@ -101,15 +138,15 @@
   }
 
   .panel {
-    @apply rounded-lg border border-border bg-card;
+    @apply rounded-xl border border-border bg-card shadow-sm;
   }
 
   .label-eyebrow {
-    @apply font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground;
+    @apply font-sans text-[12px] font-semibold uppercase tracking-[0.16em] text-orchid;
   }
 
   .wordmark {
-    @apply font-display text-[13px] font-semibold uppercase tracking-[0.28em] text-sand;
+    @apply font-display text-[14px] font-bold uppercase tracking-[0.28em] text-pearl;
   }
 
   .focus-ring {
@@ -118,6 +155,20 @@
 
   .mono {
     @apply font-mono text-[12px] tracking-tight;
+  }
+
+  .card-highlight {
+    background: linear-gradient(180deg, #261D2E 0%, #1A1422 100%);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card-highlight::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 120%, rgba(201, 149, 188, 0.22), transparent 70%);
   }
 
   /* Responsive table container: enables horizontal scroll on the table itself,
@@ -136,19 +187,19 @@
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--border));
+  background-color: rgba(142, 115, 139, 0.35);
   border-radius: 9999px;
-  border: 3px solid hsl(var(--background));
+  border: 2px solid #100E14;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(50 6% 32%);
+  background-color: rgba(201, 149, 188, 0.55);
 }
 
 /* ---- Accessibility: reduced motion ---- */

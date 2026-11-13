@@ -13,7 +13,7 @@ export function FutureWorkspacePreview() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="label-eyebrow">Prepared interface</p>
-          <h2 className="mt-1 font-display text-xl font-medium text-sand">
+          <h2 className="mt-1 font-display text-xl font-semibold text-foreground">
             Claims, evidence and handover
           </h2>
         </div>

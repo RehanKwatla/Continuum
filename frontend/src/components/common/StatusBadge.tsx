@@ -84,11 +84,11 @@ export function SourceTypeBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border border-border/80 bg-secondary/60 px-2 py-0.5 text-[11px] font-medium text-secondary-foreground",
+        "inline-flex items-center gap-1.5 rounded-md border border-border/80 bg-secondary/80 px-2 py-0.5 text-[12px] font-medium text-secondary-foreground",
         className,
       )}
     >
-      <Icon className="h-3 w-3 text-muted-foreground" />
+      <Icon className="h-3.5 w-3.5 text-muted-foreground" />
       {meta.label}
     </span>
   );

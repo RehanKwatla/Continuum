@@ -25,12 +25,12 @@ export function ClaimCard({
     <Link
       to={`/projects/${projectId}/memory/claims/${claim.id}`}
       className={cn(
-        "block rounded-lg border border-border bg-card/40 p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+        "block rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/50 hover:bg-card/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
         className,
       )}
     >
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/80 bg-secondary/60 text-muted-foreground">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-secondary text-primary font-semibold">
           <Icon className="h-3.5 w-3.5" />
         </span>
         <div className="min-w-0 flex-1">

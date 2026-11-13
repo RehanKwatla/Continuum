@@ -96,7 +96,7 @@ export default function Login() {
           <span className="wordmark">Continuum</span>
         </Link>
         <div className="max-w-md">
-          <h1 className="font-display text-4xl font-medium leading-[1.05] tracking-tight text-sand">
+          <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-foreground">
             People leave.
             <br />
             Knowledge stays.

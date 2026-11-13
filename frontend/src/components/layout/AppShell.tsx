@@ -41,8 +41,13 @@ const WORKSPACE_KEY = "continuum.workspaceId";
 
 function Wordmark() {
   return (
-    <Link to="/dashboard" className="wordmark">
-      Continuum
+    <Link to="/dashboard" className="flex items-center gap-2.5 group">
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm shadow-sm transition-transform group-hover:scale-105">
+        C
+      </span>
+      <span className="font-display text-[15px] font-bold tracking-[0.24em] text-foreground uppercase">
+        Continuum
+      </span>
     </Link>
   );
 }
@@ -72,21 +77,21 @@ function WorkspaceSelector() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-background/40 px-2.5 py-2 text-left transition-colors hover:border-primary/50"
+            className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-left transition-all hover:border-primary/50 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
           >
             <span className="min-w-0">
-              <span className="block text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
                 Workspace
               </span>
-              <span className="mt-0.5 block truncate text-sm text-foreground">
+              <span className="mt-0.5 block truncate text-sm font-medium text-foreground">
                 {workspaces.isLoading ? "Loading…" : selected?.name ?? "No workspace"}
               </span>
             </span>
-            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+        <DropdownMenuContent align="start" className="w-56 border-border bg-card">
+          <DropdownMenuLabel className="text-xs text-muted-foreground">Workspaces</DropdownMenuLabel>
           {items.length === 0 ? (
             <DropdownMenuItem disabled>None yet</DropdownMenuItem>
           ) : (
@@ -98,13 +103,16 @@ function WorkspaceSelector() {
                   window.localStorage.setItem(WORKSPACE_KEY, workspace.id);
                   navigate(`/projects?workspace_id=${workspace.id}`);
                 }}
+                className="cursor-pointer text-sm hover:bg-secondary"
               >
                 <span className="truncate">{workspace.name}</span>
               </DropdownMenuItem>
             ))
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => setOpenCreate(true)}>New workspace</DropdownMenuItem>
+          <DropdownMenuSeparator className="bg-border" />
+          <DropdownMenuItem onSelect={() => setOpenCreate(true)} className="cursor-pointer text-sm text-primary hover:bg-secondary">
+            New workspace
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <WorkspaceCreateDialog open={openCreate} onOpenChange={setOpenCreate} />
@@ -114,7 +122,7 @@ function WorkspaceSelector() {
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <nav className="flex flex-col gap-0.5" aria-label="Primary">
+    <nav className="flex flex-col gap-1" aria-label="Primary">
       {NAV_ITEMS.map(({ to, label, Icon }) => (
         <NavLink
           key={to}
@@ -122,14 +130,14 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              "flex items-center gap-2.5 rounded-md border-l-2 px-2.5 py-2 text-sm transition-colors",
+              "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
               isActive
-                ? "border-primary bg-primary/10 text-foreground"
-                : "border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
+                ? "border-l-2 border-primary bg-primary/15 text-foreground shadow-sm"
+                : "border-l-2 border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
             )
           }
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-4 w-4 shrink-0 transition-colors group-hover:text-primary" />
           <span className="truncate">{label}</span>
         </NavLink>
       ))}
@@ -176,16 +184,16 @@ function ProfileFooter() {
   };
 
   return (
-    <div className="border-t border-border p-3">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-xs font-medium uppercase text-sand">
+    <div className="border-t border-border p-3.5">
+      <div className="flex items-center gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs font-bold uppercase text-primary shadow-sm">
           {label.slice(0, 1)}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm text-foreground">
+          <p className="truncate text-sm font-medium text-foreground">
             {isDemoSession ? "Public Demo" : (user?.full_name ?? "Continuum user")}
           </p>
-          <p className="truncate font-mono text-[10px] text-muted-foreground">
+          <p className="truncate font-mono text-[11px] text-muted-foreground">
             {isDemoSession
               ? isDemoReadOnly
                 ? "Judge access · Read-only"
@@ -201,6 +209,7 @@ function ProfileFooter() {
               aria-label="Reset demo workspace"
               disabled={resetDemo.isPending}
               onClick={() => void handleResetDemo()}
+              className="hover:bg-secondary text-muted-foreground hover:text-foreground"
             >
               <RotateCcw className={cn("h-4 w-4", resetDemo.isPending && "animate-spin")} />
             </Button>
@@ -213,6 +222,7 @@ function ProfileFooter() {
               aria-label="Sign out"
               disabled={signingOut}
               onClick={() => void handleSignOut()}
+              className="hover:bg-secondary text-muted-foreground hover:text-foreground"
             >
               <LogOut className="h-4 w-4" />
             </Button>
@@ -238,7 +248,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-/** Responsive application frame: charcoal sidebar, lifted main canvas. */
+/** Responsive application frame: Midnight Amethyst sidebar, lifted main canvas. */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const location = useLocation();
@@ -271,23 +281,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [mobileOpen]);
 
   return (
-    <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-      <aside className="hidden border-r border-border bg-sidebar lg:flex lg:flex-col">
+    <div className="min-h-screen bg-transparent lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
+      <aside className="hidden border-r border-border bg-sidebar/95 backdrop-blur-md lg:flex lg:flex-col">
         <SidebarBody />
       </aside>
 
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
           <div
-            className="absolute inset-0 bg-black/70"
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
-          <div className="relative flex h-full w-[280px] flex-col border-r border-border bg-sidebar">
+          <div className="relative flex h-full w-[270px] flex-col border-r border-border bg-sidebar shadow-2xl">
             <Button
               variant="ghost"
               size="icon"
-              className="absolute right-2 top-3"
+              className="absolute right-2 top-3 text-muted-foreground hover:text-foreground"
               onClick={() => setMobileOpen(false)}
               aria-label="Close navigation"
             >
@@ -300,7 +310,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-col">
         <Topbar onOpenNav={() => setMobileOpen(true)} />
-        <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-8 sm:px-6 lg:px-10">
+        <main className="mx-auto w-full max-w-[1240px] flex-1 px-4 py-8 sm:px-6 lg:px-10">
           <div key={location.pathname} className="animate-fade-in">
             {children}
           </div>

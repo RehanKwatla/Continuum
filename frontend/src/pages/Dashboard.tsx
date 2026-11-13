@@ -23,11 +23,12 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState, ErrorState } from "@/components/common/States";
 import { MetricTile, PageHeader } from "@/components/common/PageHeader";
+import { cn } from "@/lib/utils";
 import {
   ProcessingStatusBadge,
   ProjectStatusBadge,
@@ -94,6 +95,119 @@ function Breakdown({
             })}
           </ul>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function VelocityChart({ score }: { score: number | string }) {
+  const [range, setRange] = React.useState<"1D" | "1W" | "1M" | "6M" | "1Y">("1M");
+  const ranges = ["1D", "1W", "1M", "6M", "1Y"] as const;
+
+  return (
+    <Card className="overflow-hidden border-border bg-card shadow-sm">
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between space-y-0 pb-3">
+        <div>
+          <CardTitle className="text-base font-semibold text-foreground">
+            Continuity &amp; Verification Velocity
+          </CardTitle>
+          <CardDescription className="text-xs text-muted-foreground mt-0.5">
+            Deterministic claim verification rate, evidence linkage, and handover maturity trajectory
+          </CardDescription>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-secondary/80 p-1">
+          {ranges.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-all",
+                range === r
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-2">
+        <div className="relative h-52 w-full">
+          <svg viewBox="0 0 820 220" className="h-full w-full overflow-visible" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="velocityGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#C995BC" stopOpacity="0.30" />
+                <stop offset="65%" stopColor="#8E738B" stopOpacity="0.08" />
+                <stop offset="100%" stopColor="#18131E" stopOpacity="0.0" />
+              </linearGradient>
+              <filter id="velocityGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            {/* Grid horizontal guidelines */}
+            <line x1="20" y1="30" x2="800" y2="30" stroke="rgba(142, 115, 139, 0.14)" strokeDasharray="3,3" />
+            <line x1="20" y1="85" x2="800" y2="85" stroke="rgba(142, 115, 139, 0.14)" strokeDasharray="3,3" />
+            <line x1="20" y1="140" x2="800" y2="140" stroke="rgba(142, 115, 139, 0.14)" strokeDasharray="3,3" />
+            <line x1="20" y1="195" x2="800" y2="195" stroke="rgba(142, 115, 139, 0.22)" />
+
+            {/* Area fill under curve */}
+            <path
+              d="M 20 65 Q 60 75, 110 110 T 200 130 T 290 145 T 380 135 T 470 142 T 560 115 T 650 135 T 740 120 T 800 60 L 800 195 L 20 195 Z"
+              fill="url(#velocityGrad)"
+            />
+
+            {/* Stroke path */}
+            <path
+              d="M 20 65 Q 60 75, 110 110 T 200 130 T 290 145 T 380 135 T 470 142 T 560 115 T 650 135 T 740 120 T 800 60"
+              fill="none"
+              stroke="#C995BC"
+              strokeWidth="2.6"
+              filter="url(#velocityGlow)"
+              strokeLinecap="round"
+            />
+
+            {/* Vertical dashed checkpoint guideline at peak */}
+            <line
+              x1="560"
+              y1="20"
+              x2="560"
+              y2="195"
+              stroke="#8E738B"
+              strokeWidth="1.5"
+              strokeDasharray="4,4"
+              strokeOpacity="0.7"
+            />
+
+            {/* Checkpoint node circle */}
+            <circle cx="560" cy="115" r="5" fill="#C995BC" filter="url(#velocityGlow)" />
+            <circle cx="560" cy="115" r="9" fill="none" stroke="#C995BC" strokeWidth="1.8" strokeOpacity="0.6" />
+          </svg>
+
+          {/* Floating glass tooltip */}
+          <div className="absolute left-[64%] top-[14px] rounded-lg border border-border/80 bg-card/95 px-3 py-2 shadow-xl backdrop-blur-md">
+            <div className="text-[11px] font-mono text-muted-foreground">Active Milestone • Handover Verified</div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-sm font-bold text-foreground">{score}% Verified</span>
+              <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[11px] font-medium text-emerald-400">
+                +3.5%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Month labels */}
+        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground/80 font-mono px-2">
+          <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span>
+          <span className="font-bold text-primary">Jun</span>
+          <span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span>
+        </div>
       </CardContent>
     </Card>
   );
@@ -256,7 +370,7 @@ export default function Dashboard() {
               <section className="space-y-3" aria-labelledby="demo-projects-heading">
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
-                    <h2 id="demo-projects-heading" className="font-display text-lg font-medium text-sand">
+                    <h2 id="demo-projects-heading" className="font-display text-lg font-semibold text-foreground">
                       Explore sample projects
                     </h2>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -316,22 +430,47 @@ export default function Dashboard() {
                 label="Readiness Assessment"
                 value={demo.data?.counts?.readiness_score != null ? `${demo.data.counts.readiness_score}%` : "—"}
                 hint={demo.data?.counts?.readiness_score != null ? "Run 'Re-evaluate' for latest score" : "Run evaluation to see score"}
-                icon={<Gauge className="h-4 w-4 text-status-ok" />}
+                icon={<Gauge className="h-4 w-4 text-emerald-400" />}
               />
             </div>
 
-            {/* Featured Continuity Sections: Review, Conflict, Handover & Readiness */}
+            {/* Velocity Chart */}
+            <VelocityChart score={demo.data?.counts?.readiness_score ?? "98.2"} />
+
+            {/* Featured Continuity Sections: Review, Conflict, Handover & Highlight */}
             {demoProjectId ? (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {/* Special Highlight Card: Decisions Verified by Evidence */}
+                <div className="card-highlight rounded-xl border border-primary/30 p-5 flex flex-col justify-between shadow-lg">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                      Decisions Powered by Data
+                    </div>
+                    <h3 className="font-display text-base font-bold text-foreground">
+                      Decisions Verified by Evidence
+                    </h3>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Continuum reconstructs architectural decisions across repositories, runbooks, and pull requests to eliminate handover risk.
+                    </p>
+                  </div>
+                  <Button asChild size="sm" className="mt-4 self-start gap-1.5 text-xs shadow-md">
+                    <Link to={`/projects/${demoProjectId}`}>
+                      Explore Project
+                      <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </Button>
+                </div>
+
                 {/* Reconstructed Memory & Review */}
                 <Card className="flex flex-col justify-between">
                   <CardHeader className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                      <CardTitle className="flex items-center gap-2 text-sm font-semibold">
                         <Sparkles className="h-4 w-4 text-primary" />
                         Project Memory
                       </CardTitle>
-                      <Badge variant="outline" className="font-mono text-[10px]">
+                      <Badge variant="outline" className="font-mono text-[11px]">
                         {demo.data?.counts?.claims != null ? `${demo.data.counts.claims} CLAIMS` : "CLAIMS"}
                       </Badge>
                     </div>
@@ -341,8 +480,8 @@ export default function Dashboard() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="rounded-md border border-border/70 bg-card/40 p-2.5 text-xs">
-                      <span className="font-mono text-[10px] uppercase text-primary">Sample Claim:</span>
-                      <p className="mt-1 line-clamp-2 text-foreground">
+                      <span className="font-mono text-[10px] uppercase text-primary font-semibold">Sample Claim:</span>
+                      <p className="mt-1 line-clamp-2 text-foreground text-xs">
                         "Stripe and Adyen are configured with automatic failover if API latency exceeds 800ms."
                       </p>
                     </div>
@@ -366,11 +505,11 @@ export default function Dashboard() {
                 <Card className="flex flex-col justify-between">
                   <CardHeader className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                      <CardTitle className="flex items-center gap-2 text-sm font-semibold">
                         <Scale className="h-4 w-4 text-amber-400" />
                         Conflict Centre
                       </CardTitle>
-                      <Badge variant="warn" className="font-mono text-[10px]">
+                      <Badge variant="warn" className="font-mono text-[11px]">
                         1 OPEN CONFLICT
                       </Badge>
                     </div>
@@ -380,11 +519,11 @@ export default function Dashboard() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-amber-400">
+                      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-amber-400 font-semibold">
                         <AlertTriangle className="h-3 w-3" />
                         PostgreSQL Version Disagreement
                       </div>
-                      <p className="mt-1 text-muted-foreground">
+                      <p className="mt-1 text-muted-foreground text-xs">
                         Architecture spec claims v14; Docker Compose specifies v16.
                       </p>
                     </div>
@@ -400,14 +539,14 @@ export default function Dashboard() {
                 </Card>
 
                 {/* Approved Handover & Readiness */}
-                <Card className="flex flex-col justify-between md:col-span-2 lg:col-span-1">
+                <Card className="flex flex-col justify-between">
                   <CardHeader className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                        <FileCheck className="h-4 w-4 text-status-ok" />
+                      <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                        <FileCheck className="h-4 w-4 text-emerald-400" />
                         Approved Handover
                       </CardTitle>
-                      <Badge variant="ok" className="font-mono text-[10px]">
+                      <Badge variant="ok" className="font-mono text-[11px]">
                         PUBLISHED V1
                       </Badge>
                     </div>
@@ -418,8 +557,8 @@ export default function Dashboard() {
                   <CardContent className="space-y-3">
                     <div className="rounded-md border border-border/70 bg-card/40 p-2.5 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium text-foreground">Payment Gateway System Handover</span>
-                        <Badge variant="outline" className="font-mono text-[10px] text-status-ok">
+                        <span className="font-medium text-foreground text-xs">Payment Gateway Handover</span>
+                        <Badge variant="outline" className="font-mono text-[11px] text-emerald-400 border-emerald-500/30">
                           Score: 98.2
                         </Badge>
                       </div>
@@ -447,7 +586,7 @@ export default function Dashboard() {
 
             {/* Ingestion Status Breakdown */}
             <div className="space-y-3">
-              <h2 className="font-display text-lg font-medium text-sand">Ingestion status</h2>
+              <h2 className="font-display text-lg font-semibold text-foreground">Ingestion status</h2>
                 <div className="grid gap-3 lg:grid-cols-2">
                   <Breakdown
                     title="Sources by type"
