@@ -164,3 +164,50 @@ class HandoverVersion(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<HandoverVersion {self.id} v{self.version_number} {self.status}>"
+
+
+class SuccessorHandoverPackage(Base):
+    """Immutable generated Stage 6 package bound to one repository snapshot.
+
+    Review edits are saved as a new row linked through ``previous_package_id``;
+    previously approved packages therefore remain intact after regeneration.
+    """
+
+    __tablename__ = "successor_handover_packages"
+    __table_args__ = (
+        UniqueConstraint("project_id", "successor_role", "version_number", name="uq_successor_handover_project_role_version"),
+        Index("ix_successor_handover_project_created", "project_id", "created_at"),
+    )
+
+    id: Mapped[UuidPK]
+    project_id: Mapped[UuidFK] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    repository_id: Mapped[UuidFK] = mapped_column(ForeignKey("repository_connections.id", ondelete="CASCADE"), index=True)
+    snapshot_id: Mapped[UuidFK] = mapped_column(ForeignKey("repository_snapshots.id", ondelete="CASCADE"), index=True)
+    previous_package_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("successor_handover_packages.id", ondelete="SET NULL"), nullable=True, index=True)
+    successor_role: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft", server_default="draft", index=True)
+    content: Mapped[JsonObject] = mapped_column(nullable=False, default=dict)
+    source_run_ids: Mapped[JsonObject] = mapped_column(nullable=False, default=dict)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[CreatedAt]
+    updated_at: Mapped[UpdatedAt]
+
+
+class SuccessorHandoverVerification(Base):
+    """Observable successor activity; opening or generating a package is not verification."""
+
+    __tablename__ = "successor_handover_verifications"
+    __table_args__ = (Index("ix_successor_handover_verifications_package_created", "package_id", "created_at"),)
+
+    id: Mapped[UuidPK]
+    package_id: Mapped[UuidFK] = mapped_column(ForeignKey("successor_handover_packages.id", ondelete="CASCADE"), index=True)
+    activity_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="not_started", server_default="not_started", index=True)
+    evidence: Mapped[JsonArray] = mapped_column(nullable=False, default=list)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verified_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[CreatedAt]

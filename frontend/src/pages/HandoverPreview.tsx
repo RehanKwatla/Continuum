@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   Archive,
   ArrowLeft,
@@ -55,6 +56,7 @@ import { hasAtLeast } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { ApiClientError, toErrorMessage } from "@/services/api";
 import { downloadHandover, type HandoverExportFormat } from "@/services/memory";
+import { createSuccessorHandover, downloadSuccessorHandover, downloadSuccessorHandoverPdf, getSuccessorHandover, getSuccessorVerification, recordSuccessorVerification, transitionSuccessorHandover, type SavedSuccessorHandover } from "@/services/handover-intelligence";
 import type {
   ClaimSummary,
   Handover,
@@ -749,6 +751,49 @@ export default function HandoverPreview() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [successorRole, setSuccessorRole] = useState("project_maintainer");
+  const [customSuccessorRole, setCustomSuccessorRole] = useState("");
+  const [savedSuccessorPackage, setSavedSuccessorPackage] = useState<SavedSuccessorHandover | null>(null);
+  const resolvedSuccessorRole = successorRole === "__custom__" ? (customSuccessorRole.trim() || "custom") : successorRole;
+  const successor = useQuery({
+    queryKey: ["successor-handover", projectId, resolvedSuccessorRole],
+    queryFn: () => getSuccessorHandover(projectId as string, resolvedSuccessorRole),
+    enabled: Boolean(projectId) && (successorRole !== "__custom__" || customSuccessorRole.trim().length > 0),
+  });
+  const verification = useQuery({
+    queryKey: ["successor-verification", projectId, savedSuccessorPackage?.id],
+    queryFn: () => getSuccessorVerification(projectId as string, savedSuccessorPackage?.id as string),
+    enabled: Boolean(projectId && savedSuccessorPackage?.id),
+  });
+  const saveSuccessorDraft = async () => {
+    if (!projectId) return;
+    try {
+      setSavedSuccessorPackage(await createSuccessorHandover(projectId, resolvedSuccessorRole));
+      toast({ title: "Successor handover saved", description: "A snapshot-bound draft revision was preserved." , variant: "success" });
+    } catch (error) {
+      toast({ title: "Could not save successor handover", description: toErrorMessage(error), variant: "error" });
+    }
+  };
+  const transitionSavedPackage = async (action: "submit" | "approve") => {
+    if (!projectId || !savedSuccessorPackage) return;
+    try {
+      setSavedSuccessorPackage(await transitionSuccessorHandover(projectId, savedSuccessorPackage.id, action));
+      toast({ title: action === "submit" ? "Submitted for review" : "Successor handover approved", description: "The package status was recorded." , variant: "success" });
+    } catch (error) {
+      toast({ title: "Could not update handover status", description: toErrorMessage(error), variant: "error" });
+    }
+  };
+  const verifyOnboardingStep = async (step: { title: string; phase: string }) => {
+    if (!projectId || !savedSuccessorPackage) return;
+    const activity = step.phase === "orientation" || step.phase === "codebase" ? "architecture_understanding" : step.phase === "environment" ? "environment_setup" : step.phase === "history" ? "historical_context" : step.phase === "work" || step.phase === "contribution" ? "independent_task" : "dependency_understanding";
+    try {
+      await recordSuccessorVerification(projectId, savedSuccessorPackage.id, activity, `Successor confirmed completion of: ${step.title}`);
+      await verification.refetch();
+      toast({ title: "Verification recorded", description: "This is a user-confirmed activity, not an inferred completion.", variant: "success" });
+    } catch (error) {
+      toast({ title: "Could not record verification", description: toErrorMessage(error), variant: "error" });
+    }
+  };
 
   // Default to the most recent handover once the list loads.
   useEffect(() => {
@@ -913,22 +958,29 @@ export default function HandoverPreview() {
           ))}
         </div>
       ) : hasNone ? (
-        <EmptyState
-          icon={<ScrollText className="h-4 w-4" />}
-          title="No handover generated yet"
-          description="A handover is written from the claims a human has approved. Approve claims in the memory workspace, then generate the handover here."
-          action={
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" asChild>
-                <Link to={`/projects/${projectId}/memory/claims?status=Verified`}>
-                  <FileText className="h-4 w-4" />
-                  Review approved claims
-                </Link>
-              </Button>
-              {canGenerate ? generateButton : null}
-            </div>
-          }
-        />
+        <div className="space-y-4">
+          <EmptyState
+            icon={<ScrollText className="h-4 w-4" />}
+            title="No claim-based handover generated yet"
+            description="The successor plan below is assembled from repository snapshots and Stage 3–5 analysis. The claim-based document workflow remains available after reviewers approve project claims."
+            action={<div className="flex items-center gap-2"><Button size="sm" variant="outline" asChild><Link to={`/projects/${projectId}/memory/claims?status=Verified`}><FileText className="h-4 w-4" />Review approved claims</Link></Button>{canGenerate ? generateButton : null}</div>}
+          />
+          <Card>
+            <CardHeader><CardTitle className="text-sm">Snapshot successor plan</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={successorRole} onValueChange={setSuccessorRole}><SelectTrigger className="h-9 w-64 text-xs"><SelectValue /></SelectTrigger><SelectContent>{[["project_maintainer", "Project maintainer"], ["backend_developer", "Backend developer"], ["frontend_developer", "Frontend developer"], ["full_stack_developer", "Full-stack developer"], ["ml_ai_engineer", "ML / AI engineer"], ["devops_infrastructure_engineer", "DevOps / infrastructure"], ["__custom__", "Custom role…"]].map(([value, label]) => <SelectItem key={value} value={value} className="text-xs">{label}</SelectItem>)}</SelectContent></Select>
+                {successorRole === "__custom__" ? <Input className="h-9 w-56 text-xs" maxLength={40} placeholder="e.g. Security engineer" value={customSuccessorRole} onChange={(event) => setCustomSuccessorRole(event.target.value)} /> : null}
+                <Button size="sm" onClick={() => void saveSuccessorDraft()} disabled={!canGenerate || successor.isLoading}>Save generated draft</Button>
+                {savedSuccessorPackage ? <Badge variant={savedSuccessorPackage.status === "approved" ? "ok" : "secondary"}>v{savedSuccessorPackage.version} · {savedSuccessorPackage.status}</Badge> : null}
+                {savedSuccessorPackage?.status === "draft" && canReview ? <Button size="sm" variant="outline" onClick={() => void transitionSavedPackage("submit")}>Submit for review</Button> : null}
+                {savedSuccessorPackage?.status === "in_review" && canReview ? <Button size="sm" onClick={() => void transitionSavedPackage("approve")}>Approve</Button> : null}
+                {successor.data ? <Button size="sm" variant="outline" onClick={() => void downloadSuccessorHandover(projectId, resolvedSuccessorRole)}>Download Markdown</Button> : null}
+              </div>
+              {successor.isLoading ? <Skeleton className="h-20 w-full rounded-lg" /> : successor.isError ? <p className="text-xs text-muted-foreground">{toErrorMessage(successor.error)} Connect a repository and run its analysis first.</p> : successor.data ? <><p className="text-xs text-muted-foreground">{successor.data.readiness.status.replace(/_/g, " ")} · snapshot {successor.data.snapshot_commit?.slice(0, 12) ?? successor.data.snapshot_branch} · {successor.data.tasks.length} suggested tasks</p><div className="grid gap-2 md:grid-cols-2">{successor.data.sections.map((section) => <div className="rounded-md border border-border p-3" key={section.key}><p className="text-xs font-medium">{section.title}</p><p className="mt-1 text-xs text-muted-foreground">{section.items.length ? `${section.items.length} evidence-linked item(s)` : "Not established in available evidence"}</p></div>)}</div></> : null}
+            </CardContent>
+          </Card>
+        </div>
       ) : handover.isError ? (
         <ErrorState
           error={handover.error}
@@ -1111,6 +1163,7 @@ export default function HandoverPreview() {
           <Tabs defaultValue="document">
             <TabsList>
               <TabsTrigger value="document">Document</TabsTrigger>
+              <TabsTrigger value="successor-plan">Successor plan</TabsTrigger>
               <TabsTrigger value="versions">
                 Versions
                 {versions.data ? ` (${versions.data.length})` : ""}
@@ -1133,6 +1186,44 @@ export default function HandoverPreview() {
               ) : (
                 <VersionDocument projectId={projectId} version={current} claimMap={claimMap} />
               )}
+            </TabsContent>
+
+            <TabsContent value="successor-plan">
+              <div className="space-y-4">
+                <div className="panel flex flex-wrap items-center justify-between gap-3 border border-border p-4">
+                  <div>
+                    <p className="label-eyebrow">Snapshot-bound successor plan</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Built from persisted code, history, and knowledge analysis. This is a generated preview; it does not mark a handover approved.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                  <Select value={successorRole} onValueChange={setSuccessorRole}>
+                    <SelectTrigger className="h-9 w-64 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[["project_maintainer", "Project maintainer"], ["backend_developer", "Backend developer"], ["frontend_developer", "Frontend developer"], ["full_stack_developer", "Full-stack developer"], ["ml_ai_engineer", "ML / AI engineer"], ["devops_infrastructure_engineer", "DevOps / infrastructure"], ["__custom__", "Custom role…"]].map(([value, label]) => <SelectItem key={value} value={value} className="text-xs">{label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {successorRole === "__custom__" ? <Input className="h-9 w-56 text-xs" maxLength={40} placeholder="e.g. Security engineer" value={customSuccessorRole} onChange={(event) => setCustomSuccessorRole(event.target.value)} /> : null}
+                  </div>
+                </div>
+                {successor.isLoading ? <Skeleton className="h-32 w-full rounded-lg" /> : successor.isError ? <div className="panel border border-border p-4 text-xs text-muted-foreground">{toErrorMessage(successor.error)} Ensure repository ingestion and Stage 3–5 analyses have run.</div> : successor.data ? <>
+                  <div className="panel flex flex-wrap items-center gap-4 border border-border p-4 text-xs">
+                  <Badge variant={successor.data.readiness.status === "ready" ? "ok" : "warn"}>{successor.data.readiness.status.replace(/_/g, " ")}</Badge>
+                    <span>Snapshot <span className="font-mono">{successor.data.snapshot_commit?.slice(0, 12) ?? successor.data.snapshot_branch}</span></span>
+                    <span>{successor.data.source_coverage.files_processed}/{successor.data.source_coverage.files_discovered} files processed</span>
+                    <span>{successor.data.source_coverage.knowledge_unit_count} knowledge records</span>
+                    <Button size="sm" variant="outline" className="ml-auto" onClick={() => void downloadSuccessorHandover(projectId, resolvedSuccessorRole).catch((error) => toast({ title: "Could not export successor handover", description: toErrorMessage(error), variant: "error" }))}><FileText className="h-3.5 w-3.5" />Markdown</Button>
+                    {savedSuccessorPackage ? <Button size="sm" variant="outline" onClick={() => void downloadSuccessorHandoverPdf(projectId, savedSuccessorPackage.id).catch((error) => toast({ title: "Could not export successor handover", description: toErrorMessage(error), variant: "error" }))}><FileDown className="h-3.5 w-3.5" />PDF</Button> : null}
+                    <Button size="sm" variant="outline" onClick={() => void saveSuccessorDraft()}>{savedSuccessorPackage ? `Saved v${savedSuccessorPackage.version}` : "Save draft"}</Button>
+                    {savedSuccessorPackage?.status === "draft" && canReview ? <Button size="sm" variant="outline" onClick={() => void transitionSavedPackage("submit")}>Submit for review</Button> : null}
+                    {savedSuccessorPackage?.status === "in_review" && canReview ? <Button size="sm" onClick={() => void transitionSavedPackage("approve")}>Approve</Button> : null}
+                    {savedSuccessorPackage?.status === "approved" ? <Badge variant="ok">Approved v{savedSuccessorPackage.version}</Badge> : null}
+                  </div>
+                  {successor.data.readiness.blockers.length ? <Card><CardHeader><CardTitle className="text-sm">Readiness blockers</CardTitle></CardHeader><CardContent className="space-y-2">{successor.data.readiness.blockers.map((item, index) => <div key={index} className="rounded-md border border-border p-3"><p className="text-xs font-medium">{item.title}</p><p className="mt-1 text-xs text-muted-foreground">{item.description}</p></div>)}</CardContent></Card> : null}
+                  <div className="grid gap-4 lg:grid-cols-2">{successor.data.sections.map((section) => <Card key={section.key}><CardHeader><CardTitle className="text-sm">{section.title}</CardTitle></CardHeader><CardContent className="space-y-2">{section.items.length ? section.items.slice(0, 12).map((item, index) => <div key={index} className="border-l-2 border-primary/40 pl-3 text-xs"><p>{item.text ?? item.content ?? item.title}</p><div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted-foreground">{item.evidence_level ? <span>{item.evidence_level}</span> : null}{item.evidence?.map((ev, evIndex) => ev.url ? <a key={evIndex} className="text-primary underline" href={ev.url} target="_blank" rel="noreferrer">{ev.label ?? ev.file_path ?? "source"}</a> : <span key={evIndex}>{ev.file_path ?? ev.label}</span>)}</div></div>) : <p className="text-xs text-muted-foreground">Not established in available snapshot evidence.</p>}</CardContent></Card>)}</div>
+                  <div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader><CardTitle className="text-sm">Suggested tasks ({successor.data.tasks.length})</CardTitle></CardHeader><CardContent className="space-y-2">{successor.data.tasks.slice(0, 20).map((task) => <div key={task.id} className="rounded-md border border-border p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs font-medium">{task.title}</p><Badge variant={task.priority === "high" ? "danger" : "secondary"}>{task.priority}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{task.description}</p>{task.evidence.map((ev, index) => ev.url ? <a key={index} className="mt-2 inline-block text-[10px] text-primary underline" href={ev.url} target="_blank" rel="noreferrer">{ev.label ?? "Open evidence"}</a> : null)}</div>)}</CardContent></Card><Card><CardHeader><CardTitle className="text-sm">Onboarding path</CardTitle></CardHeader><CardContent className="space-y-3">{successor.data.onboarding.map((step) => { const verified = verification.data?.some((item) => item.status === "verified" && item.result === `Successor confirmed completion of: ${step.title}`); return <div key={step.phase} className="border-l-2 border-primary/40 pl-3"><div className="flex items-center justify-between gap-2"><p className="text-xs font-medium">{step.title}</p>{savedSuccessorPackage ? <Button size="sm" variant="ghost" disabled={verified} onClick={() => void verifyOnboardingStep(step)}>{verified ? "Confirmed" : "Confirm"}</Button> : null}</div><p className="mt-1 text-xs text-muted-foreground">{step.objective}</p></div>; })}</CardContent></Card></div>
+                  <p className="text-[11px] text-muted-foreground">{successor.data.limitations.join(" ")}</p>
+                </> : null}
+              </div>
             </TabsContent>
 
             <TabsContent value="versions">

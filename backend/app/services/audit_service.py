@@ -45,6 +45,11 @@ PHASE4_ACTIONS: frozenset[str] = frozenset(
         "handover_archived",
         "handover_exported",
         "handover_accessed",
+        "successor_handover_generated",
+        "successor_handover_edited",
+        "successor_handover_submitted",
+        "successor_handover_approved",
+        "successor_verification_recorded",
     }
 )
 

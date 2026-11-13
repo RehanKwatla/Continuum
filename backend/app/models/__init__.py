@@ -56,7 +56,7 @@ from app.models.repository_knowledge import (
 from app.models.evidence import Evidence
 from app.models.evidence_span import EvidenceSpan
 from app.models.github_connection import GitHubConnection
-from app.models.handover import Handover, HandoverDocument, HandoverVersion
+from app.models.handover import Handover, HandoverDocument, HandoverVersion, SuccessorHandoverPackage, SuccessorHandoverVerification
 from app.models.open_question import OpenQuestion
 from app.models.phase5 import (
     EvaluationRun,
@@ -127,6 +127,8 @@ __all__ = [
     "HandoverLifecycleStatus",
     "HandoverStatus",
     "HandoverVersion",
+    "SuccessorHandoverPackage",
+    "SuccessorHandoverVerification",
     "IssueRecord",
     "KnowledgeDependency",
     "KnowledgeGap",
