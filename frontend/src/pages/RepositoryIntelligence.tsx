@@ -30,7 +30,7 @@ type Snapshot = {
 };
 type PageData = { items: Record<string, unknown>[]; total: number; page: number; page_size: number };
 const ACTIVE = new Set(["queued", "validating", "fetching_metadata", "fetching_branches", "fetching_tree", "fetching_files", "fetching_commits", "fetching_issues", "fetching_pull_requests", "saving_snapshot"]);
-const TABS = ["Overview", "Files", "Commits", "Issues", "Pull Requests", "Analysis", "Code Intelligence"] as const;
+const TABS = ["Overview", "Files", "Commits", "Issues", "Pull Requests", "Analysis", "Code Intelligence", "History Intelligence"] as const;
 type Tab = (typeof TABS)[number];
 
 function pretty(value: string) {
@@ -57,6 +57,9 @@ export default function RepositoryIntelligence() {
   const [codeBusy, setCodeBusy] = React.useState(false);
   const [selectedModule, setSelectedModule] = React.useState("");
   const [graphZoom, setGraphZoom] = React.useState(1);
+  const [historyAnalysis, setHistoryAnalysis] = React.useState<Record<string, any> | null>(null);
+  const [historyInsights, setHistoryInsights] = React.useState<Record<string, any>[]>([]);
+  const [historyBusy, setHistoryBusy] = React.useState(false);
   const languageSummary = metadata
     ? Object.entries(metadata.languages).sort((left, right) => right[1] - left[1]).slice(0, 5).map(([name]) => name).join(", ")
     : "";
@@ -134,6 +137,16 @@ export default function RepositoryIntelligence() {
     return () => { active = false; };
   }, [repoId, codeAnalysis?.status, codeAnalysis?.id]);
 
+  React.useEffect(() => {
+    if (!repoId || tab !== "History Intelligence" || !snapshot) return;
+    void api.get<Record<string, any>>(`/repositories/${repoId}/history-analysis`, { params: { snapshot_id: snapshot.id } })
+      .then((response) => setHistoryAnalysis(response.data))
+      .catch((caught) => setError(toErrorMessage(caught)));
+    void api.get<{ items: Record<string, any>[] }>(`/repositories/${repoId}/commit-insights`, { params: { snapshot_id: snapshot.id, page: 1, page_size: 50 } })
+      .then((response) => setHistoryInsights(response.data.items))
+      .catch((caught) => setError(toErrorMessage(caught)));
+  }, [repoId, tab, snapshot?.id]);
+
   async function startCodeAnalysis() {
     if (!repoId || !snapshot) return;
     setCodeBusy(true); setError("");
@@ -142,6 +155,18 @@ export default function RepositoryIntelligence() {
       setCodeAnalysis(response.data);
     } catch (caught) { setError(toErrorMessage(caught)); }
     finally { setCodeBusy(false); }
+  }
+
+  async function startHistoryAnalysis() {
+    if (!repoId || !snapshot) return;
+    setHistoryBusy(true); setError("");
+    try {
+      const response = await api.post<Record<string, any>>(`/repositories/${repoId}/history-analysis`, null, { params: { snapshot_id: snapshot.id } });
+      setHistoryAnalysis(response.data);
+      const insights = await api.get<{ items: Record<string, any>[] }>(`/repositories/${repoId}/commit-insights`, { params: { snapshot_id: snapshot.id, page: 1, page_size: 50 } });
+      setHistoryInsights(insights.data.items);
+    } catch (caught) { setError(toErrorMessage(caught)); }
+    finally { setHistoryBusy(false); }
   }
 
   async function validate() {
@@ -212,6 +237,18 @@ export default function RepositoryIntelligence() {
           </CardContent>
         </Card>
       </div>}
+      {tab === "History Intelligence" && <Card><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Git history intelligence</CardTitle><p className="mt-1 text-sm text-muted-foreground">Evidence from commits captured for branch {snapshot.branch} in this snapshot.</p></div><Button onClick={() => void startHistoryAnalysis()} disabled={historyBusy || !["completed", "partially_completed"].includes(snapshot.status)}>{historyBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{historyAnalysis?.status === "completed" ? "Refresh history analysis" : "Analyse commit history"}</Button></CardHeader><CardContent className="space-y-5">
+        {!historyAnalysis || historyAnalysis.status === "not_started" ? <p className="text-sm text-muted-foreground">Analyse captured commits to see evidence-backed change categories, contributor activity, frequently changed files, and files that changed together.</p> : <>
+          <div className="flex flex-wrap gap-2"><Badge>{pretty(String(historyAnalysis.status))}</Badge><Badge variant="secondary">{historyAnalysis.summary?.classified_commits ?? 0} commits classified</Badge><Badge variant="secondary">{historyAnalysis.summary?.contributors_observed ?? 0} observed contributors</Badge><Badge variant="secondary">{historyAnalysis.summary?.files_changed ?? 0} changed files</Badge></div>
+          <section><h3 className="mb-2 text-sm font-semibold">Coverage</h3><p className="text-sm text-muted-foreground">{historyAnalysis.coverage?.commits_retrieved ?? 0} commits captured · {historyAnalysis.coverage?.earliest_available_commit ? new Date(historyAnalysis.coverage.earliest_available_commit).toLocaleDateString() : "earliest date unavailable"} to {historyAnalysis.coverage?.latest_available_commit ? new Date(historyAnalysis.coverage.latest_available_commit).toLocaleDateString() : "latest date unavailable"} · {historyAnalysis.coverage?.changed_files_observed ?? 0} changed paths observed</p><p className="mt-1 text-xs text-amber-700">{historyAnalysis.coverage?.coverage_note}{historyAnalysis.coverage?.coverage_limited_by_configured_limit ? ` The configured commit limit (${historyAnalysis.coverage.configured_commit_limit}) was reached.` : ""}</p><p className="mt-1 text-xs text-muted-foreground">{historyAnalysis.summary?.author_identity_note}</p></section>
+          <section><h3 className="mb-2 text-sm font-semibold">Change categories</h3><div className="flex flex-wrap gap-2">{Object.entries(historyAnalysis.summary?.category_counts ?? {}).map(([key, value]) => <Badge key={key} variant="outline">{pretty(key)} · {String(value)}</Badge>)}</div></section>
+          <section><h3 className="mb-2 text-sm font-semibold">Pull request outcomes</h3><div className="flex flex-wrap gap-2">{Object.entries(historyAnalysis.summary?.pull_request_outcomes ?? {}).map(([key, value]) => <Badge key={key} variant="secondary">{pretty(key)} · {String(value)}</Badge>)}</div><p className="mt-1 text-xs text-muted-foreground">A requested review is not counted as a completed review; PR review detail is not used to infer understanding.</p></section>
+          <section><h3 className="mb-2 text-sm font-semibold">Contributor activity</h3><div className="space-y-2">{(historyAnalysis.contributors ?? []).map((item: any) => <div key={item.identity_key} className="rounded border p-3"><p className="font-medium">{item.author_name || "Git author unavailable"}{item.github_login && <span className="ml-2 text-xs text-muted-foreground">GitHub @{item.github_login} (separate identity)</span>}</p><p className="mt-1 text-xs text-muted-foreground">{item.commits} commits · {item.files_modified} files · {item.line_stats_complete ? `+${item.additions} / −${item.deletions} lines` : "line totals unavailable"} · {item.commit_share_percent}% of observed author-email commits</p>{item.modules_touched?.length > 0 && <p className="mt-1 text-xs">Observed analyzed modules: {item.modules_touched.join(", ")}</p>}</div>)}</div>{!historyAnalysis.contributors?.length && <p className="text-sm text-muted-foreground">No commit authors were available in the captured history.</p>}</section>
+          <section><h3 className="mb-2 text-sm font-semibold">Frequently changed files</h3><div className="space-y-1">{(historyAnalysis.hotspots ?? []).slice(0, 20).map((item: any) => <p key={item.file_path} className="text-xs"><code>{item.file_path}</code> · {item.change_count} observed commits{item.known_additions !== null ? ` · +${item.known_additions} / −${item.known_deletions}` : " · line statistics unavailable"}</p>)}</div>{!historyAnalysis.hotspots?.length && <p className="text-sm text-muted-foreground">No changed file paths were returned for these commits.</p>}</section>
+          <section><h3 className="mb-2 text-sm font-semibold">Files changed together</h3><div className="space-y-1">{(historyAnalysis.co_changes ?? []).map((item: any) => <p key={item.files.join(":")} className="text-xs"><code>{item.files[0]}</code> ↔ <code>{item.files[1]}</code> · {item.co_change_count} commits</p>)}</div>{!historyAnalysis.co_changes?.length && <p className="text-sm text-muted-foreground">No file pairs co-occurred more than once in the captured commit set.</p>}</section>
+          <section><h3 className="mb-2 text-sm font-semibold">Commit summaries</h3><div className="space-y-2">{historyInsights.map((item) => <div key={item.commit_sha} className="rounded border p-3"><div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{pretty(item.category)}</Badge><Badge variant="outline">{item.confidence} confidence</Badge><code className="text-xs">{item.commit_sha.slice(0, 8)}</code></div><p className="mt-2 text-sm">{item.summary}</p>{item.signals?.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Signals: {item.signals.join(" · ")}</p>}</div>)}</div>{!historyInsights.length && <p className="text-sm text-muted-foreground">No commit insight records are available yet.</p>}</section>
+          <p className="border-t pt-3 text-xs text-muted-foreground">History activity is observational evidence. It does not establish expertise, ownership, intent, neglect, or responsibility.</p>
+        </>}</CardContent></Card>}
       {["Files", "Commits", "Issues", "Pull Requests"].includes(tab) && <Card><CardHeader><CardTitle>{tab}</CardTitle></CardHeader><CardContent className="space-y-3">
         {!data ? <p className="text-sm text-muted-foreground">Loading repository records…</p> : data.items.length === 0 ? <p className="text-sm text-muted-foreground">No {tab.toLowerCase()} have been saved for this snapshot.</p> : data.items.map((row, index) => <div key={String(row.id ?? index)} className="rounded-md border p-3"><p className="font-medium">{String(row.path ?? row.title ?? row.message ?? row.commit_sha ?? "Repository item")}</p><p className="mt-1 text-xs text-muted-foreground">{String(row.analysis_status ?? row.state ?? row.committed_at ?? row.author_name ?? "")}</p>{row.skip_reason !== undefined && row.skip_reason !== null && <p className="mt-1 text-xs text-amber-700">{String(row.skip_reason)}</p>}</div>)}
         {data && data.total > data.page_size && <div className="flex items-center justify-between"><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</Button><span className="text-xs text-muted-foreground">Page {data.page} · {data.total} records</span><Button variant="outline" size="sm" disabled={page * data.page_size >= data.total} onClick={() => setPage((current) => current + 1)}>Next</Button></div>}

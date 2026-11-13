@@ -24,6 +24,7 @@ from app.models.repository_intelligence import (
     CommitRecord, IssueRecord, PullRequestRecord, RepositoryConnection,
     RepositoryFile, RepositorySnapshot,
 )
+from app.models.git_history import CommitFileChange
 from app.models.source import Source
 from app.models.workspace import Workspace
 from app.services.ingestion_service import IngestionService
@@ -275,10 +276,28 @@ def run_snapshot(snapshot_id: uuid.UUID):
             record.author_name, record.author_email = author_obj.get("name"), author_obj.get("email")
             record.github_author = gh_author.get("login")
             record.committer_name, record.committer_email = committer_obj.get("name"), committer_obj.get("email")
+            record.committer_at = _dt(committer_obj.get("date"))
             record.message, record.committed_at, record.url = (inner.get("message") or "")[:100_000], _dt(author_obj.get("date")), detail.get("html_url")
             record.changed_files = [f.get("filename") for f in files if f.get("filename")]
             record.additions, record.deletions = detail.get("stats", {}).get("additions"), detail.get("stats", {}).get("deletions")
             record.total_changes = detail.get("stats", {}).get("total")
+            for changed_file in files:
+                filename = changed_file.get("filename")
+                if not filename:
+                    continue
+                file_change = db.scalar(select(CommitFileChange).where(
+                    CommitFileChange.snapshot_id == snap.id,
+                    CommitFileChange.commit_sha == sha_value,
+                    CommitFileChange.file_path == filename,
+                )) or CommitFileChange(snapshot_id=snap.id, commit_sha=sha_value, file_path=filename)
+                file_change.status = (changed_file.get("status") or "unknown")[:24]
+                file_change.previous_filename = changed_file.get("previous_filename")
+                file_change.additions = changed_file.get("additions")
+                file_change.deletions = changed_file.get("deletions")
+                file_change.changes = changed_file.get("changes")
+                file_change.statistics_available = all(changed_file.get(key) is not None for key in ("additions", "deletions", "changes"))
+                file_change.patch_available = isinstance(changed_file.get("patch"), str)
+                db.add(file_change)
             if record.source_id is None:
                 src = _upsert_source(db, project, SourceType.GITHUB_COMMIT, (record.message or f"Commit {sha_value[:7]}").splitlines()[0][:500], f"Commit {sha_value}\nAuthor: {record.author_name or 'unknown'}\nCommitter: {record.committer_name or 'unknown'}\n\n{record.message or ''}\n\nChanged files:\n" + "\n".join(record.changed_files[:100]), sha_value, record.author_name, record.committed_at, record.url, {"repository": connection.repository_url, "commit_sha": sha_value, "snapshot_id": str(snap.id)})
                 record.source_id = src.id if src else None
@@ -315,11 +334,15 @@ def run_snapshot(snapshot_id: uuid.UUID):
             try:
                 changed_files = provider.list_pull_request_files(connection.owner, connection.repository_name, number)
                 record.changed_files = [f.get("filename") for f in changed_files if f.get("filename")]
+                record.changed_file_count = len(changed_files)
+                record.additions = sum(f.get("additions", 0) for f in changed_files) if all(f.get("additions") is not None for f in changed_files) else None
+                record.deletions = sum(f.get("deletions", 0) for f in changed_files) if all(f.get("deletions") is not None for f in changed_files) else None
                 review_data = provider.list_pull_request_reviews(connection.owner, connection.repository_name, number)
                 record.reviews = [{"state": review.get("state"), "submitted_at": review.get("submitted_at"), "author": (review.get("user") or {}).get("login")} for review in review_data]
                 record.reviews_available = True
             except GitHubApiError as exc:
                 record.changed_files, record.reviews, record.reviews_available = [], [], False
+                record.changed_file_count, record.additions, record.deletions = None, None, None
                 warnings.append(f"PR #{number} changed-file or review details unavailable (GitHub HTTP {exc.status}).")
             src = _upsert_source(db, project, SourceType.GITHUB_PULL_REQUEST, f"PR #{number} {record.title}"[:500], f"Pull request #{number}: {record.title}\nState: {record.state}\nBase: {record.base_branch}\nHead: {record.head_branch}\n\n{record.description or '(no description)'}\n\nChanged files:\n" + "\n".join(record.changed_files[:100]) + "\n\nReviews:\n" + "\n".join(f"{r.get('author') or 'unknown'}: {r.get('state') or 'unknown'}" for r in record.reviews[:100]), f"pr#{number}", record.author, record.created_at_source, record.url, {"repository": connection.repository_url, "pull_request_number": number, "snapshot_id": str(snap.id), "changed_files_available": bool(record.changed_files), "reviews_available": record.reviews_available})
             record.source_id = src.id if src else record.source_id

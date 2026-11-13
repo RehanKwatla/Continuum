@@ -14,6 +14,7 @@ from app.core.errors import ConflictError, ForbiddenError, NotFoundError, Valida
 from app.models.enums import ACTIVE_REPOSITORY_INGESTION_STATUSES, RepositoryIngestionStatus, WorkspaceRole
 from app.models.enums import CodeAnalysisStatus
 from app.models.code_intelligence import ArchitectureComponent, CodeAnalysisRun, CodeSymbol, EntryPoint, ExternalDependency, LanguageStatistic, ModuleDependency, TechnologyDetection
+from app.models.git_history import CommitFileChange, CommitInsight, HistoryAnalysisRun
 from app.models.repository_intelligence import (
     CommitRecord, IssueRecord, PullRequestRecord, RepositoryConnection, RepositorySnapshot,
     RepositoryFile,
@@ -28,6 +29,7 @@ from app.services.repository_intelligence import (
 )
 from app.services.code_analysis.parser import PARSER_VERSION
 from app.services.code_analysis.service import run_code_analysis, run_payload
+from app.services.git_history_intelligence import ANALYSIS_VERSION as HISTORY_ANALYSIS_VERSION, analyze_history, history_payload
 
 router = APIRouter(prefix="/repositories", tags=["repository-intelligence"])
 
@@ -140,6 +142,51 @@ def code_architecture(repository_id: uuid.UUID, user: CurrentUser, db: DbSession
 def code_analysis_summary(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None):
     run = _code_run(db, repository_id, user, analysis_id)
     return run_payload(run) if run else {"status": "not_started", "message": "Start code analysis after a repository snapshot completes."}
+
+
+@router.post("/{repository_id}/history-analysis")
+def start_history_analysis(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, snapshot_id: uuid.UUID | None = None):
+    connection = _connection(db, repository_id, user)
+    snapshot = db.get(RepositorySnapshot, snapshot_id) if snapshot_id else db.scalar(select(RepositorySnapshot).where(RepositorySnapshot.repository_connection_id == repository_id).order_by(RepositorySnapshot.created_at.desc()).limit(1))
+    if not snapshot or snapshot.repository_connection_id != repository_id:
+        raise NotFoundError("Repository snapshot not found.")
+    if snapshot.ingestion_status not in {RepositoryIngestionStatus.COMPLETED, RepositoryIngestionStatus.PARTIALLY_COMPLETED}:
+        raise ConflictError("History analysis requires a completed repository snapshot.")
+    return history_payload(analyze_history(db, snapshot, connection))
+
+
+@router.get("/{repository_id}/history-analysis")
+def get_history_analysis(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, snapshot_id: uuid.UUID | None = None):
+    _connection(db, repository_id, user)
+    snapshot = db.get(RepositorySnapshot, snapshot_id) if snapshot_id else db.scalar(select(RepositorySnapshot).where(RepositorySnapshot.repository_connection_id == repository_id).order_by(RepositorySnapshot.created_at.desc()).limit(1))
+    if not snapshot or snapshot.repository_connection_id != repository_id:
+        raise NotFoundError("Repository snapshot not found.")
+    run = db.scalar(select(HistoryAnalysisRun).where(HistoryAnalysisRun.snapshot_id == snapshot.id, HistoryAnalysisRun.analysis_version == HISTORY_ANALYSIS_VERSION))
+    return history_payload(run) if run else {"status": "not_started", "snapshot_id": snapshot.id}
+
+
+@router.get("/{repository_id}/commit-changes")
+def repository_commit_changes(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, snapshot_id: uuid.UUID | None = None, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100)):
+    _connection(db, repository_id, user)
+    snapshot = db.get(RepositorySnapshot, snapshot_id) if snapshot_id else db.scalar(select(RepositorySnapshot).where(RepositorySnapshot.repository_connection_id == repository_id).order_by(RepositorySnapshot.created_at.desc()).limit(1))
+    if not snapshot or snapshot.repository_connection_id != repository_id:
+        return {"items": [], "page": page, "page_size": page_size, "total": 0}
+    query = select(CommitFileChange).where(CommitFileChange.snapshot_id == snapshot.id)
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    rows = db.scalars(query.order_by(CommitFileChange.commit_sha, CommitFileChange.file_path).offset((page - 1) * page_size).limit(page_size)).all()
+    return {"items": [{"commit_sha": row.commit_sha, "file_path": row.file_path, "status": row.status, "previous_filename": row.previous_filename, "additions": row.additions, "deletions": row.deletions, "changes": row.changes, "statistics_available": row.statistics_available, "patch_available": row.patch_available} for row in rows], "page": page, "page_size": page_size, "total": total, "snapshot_id": snapshot.id}
+
+
+@router.get("/{repository_id}/commit-insights")
+def repository_commit_insights(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, snapshot_id: uuid.UUID | None = None, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100)):
+    _connection(db, repository_id, user)
+    snapshot = db.get(RepositorySnapshot, snapshot_id) if snapshot_id else db.scalar(select(RepositorySnapshot).where(RepositorySnapshot.repository_connection_id == repository_id).order_by(RepositorySnapshot.created_at.desc()).limit(1))
+    if not snapshot or snapshot.repository_connection_id != repository_id:
+        return {"items": [], "page": page, "page_size": page_size, "total": 0}
+    query = select(CommitInsight).where(CommitInsight.snapshot_id == snapshot.id, CommitInsight.analysis_version == HISTORY_ANALYSIS_VERSION)
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    rows = db.scalars(query.order_by(CommitInsight.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    return {"items": [{"commit_sha": row.commit_sha, "category": row.category, "confidence": row.confidence, "classification_method": row.classification_method, "signals": row.signals, "summary": row.summary, "affected_components": row.affected_components, "source_references": row.source_references} for row in rows], "page": page, "page_size": page_size, "total": total, "snapshot_id": snapshot.id}
 
 
 def _error(exc: Exception):

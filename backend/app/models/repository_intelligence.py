@@ -269,6 +269,7 @@ class CommitRecord(Base):
     committer_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    committer_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     changed_files: Mapped[JsonArray] = mapped_column(nullable=False, default=list)
     additions: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -359,6 +360,9 @@ class PullRequestRecord(Base):
         DateTime(timezone=True), nullable=True
     )
     changed_files: Mapped[JsonArray] = mapped_column(nullable=False, default=list)
+    changed_file_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    additions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    deletions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reviews: Mapped[JsonArray] = mapped_column(nullable=False, default=list)
     reviews_available: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"

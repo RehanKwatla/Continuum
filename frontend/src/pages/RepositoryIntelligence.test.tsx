@@ -95,4 +95,24 @@ describe("Repository Intelligence", () => {
     expect(await screen.findByText(/Run analysis to extract languages/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Analyse snapshot" })).toBeEnabled();
   });
+
+  it("offers history analysis for the selected completed snapshot", async () => {
+    mocks.get.mockImplementation((url: string) => {
+      if (url === "/repositories/projects/project-1") return Promise.resolve({ data: { items: [{
+        id: "repo-id", owner: "fastapi", repository_name: "fastapi", repository_url: "https://github.com/fastapi/fastapi",
+        default_branch: "master", selected_branch: "master", branches: [], languages: {}, latest_snapshot: {
+          id: "snapshot-id", repository_id: "repo-id", branch: "master", commit_sha: "abc12345", status: "completed", stage: "completed",
+          tree_complete: true, files_discovered: 8, files_processed: 8, files_skipped: 0, commits_processed: 3, issues_processed: 0,
+          pull_requests_processed: 1, warnings: [], error_summary: null,
+        },
+      }] } });
+      if (url === "/repositories/repo-id/history-analysis") return Promise.resolve({ data: { status: "not_started" } });
+      return Promise.resolve({ data: { items: [] } });
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "History Intelligence" }));
+    expect(await screen.findByText("Git history intelligence")).toBeInTheDocument();
+    expect(await screen.findByText(/Analyse captured commits/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Analyse commit history" })).toBeEnabled();
+  });
 });

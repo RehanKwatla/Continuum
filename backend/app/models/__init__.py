@@ -48,6 +48,7 @@ from app.models.code_intelligence import (
     ModuleDependency,
     TechnologyDetection,
 )
+from app.models.git_history import CommitFileChange, CommitInsight, HistoryAnalysisRun
 from app.models.evidence import Evidence
 from app.models.evidence_span import EvidenceSpan
 from app.models.github_connection import GitHubConnection
@@ -78,6 +79,9 @@ from app.models.verification import Verification
 from app.models.workspace import Workspace, WorkspaceMember
 
 __all__ = [
+    "CommitFileChange",
+    "CommitInsight",
+    "HistoryAnalysisRun",
     "ArchitectureComponent",
     "CodeAnalysisRun",
     "CodeAnalysisStatus",
