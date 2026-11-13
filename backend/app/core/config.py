@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # locally installed PostgreSQL server).
     database_url: str = "postgresql+psycopg://continuum:continuum@localhost:5433/continuum"
     db_echo: bool = False
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_recycle_seconds: int = 1800
+    db_pool_pre_ping: bool = True
 
     # --- CORS ----------------------------------------------------------------
     cors_origins: Annotated[list[str], NoDecode] = [
@@ -72,6 +76,12 @@ class Settings(BaseSettings):
     public_demo_project_name: str = "Payment Gateway System"
     #: Per-client-IP request budget for token-less (public) requests.
     public_demo_rate_limit_per_minute: int = 180
+    #: Per-client-IP request budget for authenticated requests (general rate limiting).
+    api_rate_limit_per_minute: int = 300
+    #: Maximum request body size in bytes (default 10 MB) to prevent DoS via
+    #: oversized JSON payloads. File uploads are handled separately by the
+    #: ingestion service.
+    max_request_size_bytes: int = 10 * 1024 * 1024
 
     # --- GitHub OAuth & Personal Access Token --------------------------------
     github_client_id: str | None = None
@@ -141,7 +151,12 @@ class Settings(BaseSettings):
 
     @property
     def supabase_auth_configured(self) -> bool:
-        return bool(self.supabase_url and (self.supabase_jwt_secret or self.supabase_url))
+        """True when Supabase JWT verification is usable.
+
+        HS256 projects need ``supabase_jwt_secret``; RS256/ES256/EdDSA projects
+        need ``supabase_url`` (JWKS endpoint). Either is sufficient.
+        """
+        return bool(self.supabase_url or self.supabase_jwt_secret)
 
     @property
     def github_oauth_configured(self) -> bool:

@@ -11,6 +11,7 @@ import logging
 import threading
 import time
 import uuid
+import hashlib
 from collections import deque
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
@@ -86,6 +87,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "Referrer-Policy": "no-referrer",
         "Cross-Origin-Resource-Policy": "same-site",
         "X-Permitted-Cross-Domain-Policies": "none",
+        # Content-Security-Policy: lock down the API to JSON-only responses and
+        # block any inline/script execution in the browser.
+        "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none';",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     }
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
@@ -159,6 +164,100 @@ class PublicRateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Per-client request budget for *authenticated* traffic.
+
+    Applies to every request that carries an ``Authorization`` header.
+    Uses the authenticated subject (or the client IP as fallback) as the key so
+    a single abusive client cannot exhaust the shared pool.
+    """
+
+    _MAX_CLIENTS = 10_000
+
+    def __init__(self, app, *, limit: int, window_seconds: int = 60) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(app)
+        self.limit = max(1, limit)
+        self.window_seconds = window_seconds
+        self._hits: dict[str, deque[float]] = {}
+        self._lock = threading.Lock()
+
+    def _client_key(self, request: Request) -> str:
+        auth = request.headers.get("authorization")
+        if auth:
+            scheme, _, token = auth.partition(" ")
+            if scheme.lower() == "bearer" and token.strip():
+                return f"auth:{hashlib.sha256(token.strip().encode()).hexdigest()[:16]}"
+        if request.client and request.client.host:
+            return f"ip:{request.client.host}"
+        return "ip:unknown"
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        if not request.headers.get("authorization"):
+            return await call_next(request)
+
+        now = time.monotonic()
+        key = self._client_key(request)
+        with self._lock:
+            bucket = self._hits.get(key)
+            if bucket is None:
+                if len(self._hits) >= self._MAX_CLIENTS:
+                    self._hits.clear()
+                bucket = deque()
+                self._hits[key] = bucket
+            while bucket and now - bucket[0] >= self.window_seconds:
+                bucket.popleft()
+            if len(bucket) >= self.limit:
+                retry_after = int(self.window_seconds - (now - bucket[0])) + 1
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "error": {
+                            "code": "rate_limited",
+                            "message": (
+                                "Too many requests. Please slow down and try again shortly."
+                            ),
+                            "details": {"retry_after_seconds": retry_after},
+                        }
+                    },
+                    headers={"Retry-After": str(retry_after)},
+                )
+            bucket.append(now)
+        return await call_next(request)
+
+
+class MaxRequestSizeMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose body exceeds the configured limit.
+
+    Reads ``Content-Length`` before the body is consumed so oversized requests
+    are refused early without allocating memory.
+    """
+
+    def __init__(self, app, *, max_bytes: int) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(app)
+        self.max_bytes = max_bytes
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                size = int(content_length)
+            except ValueError:
+                size = 0
+            if size > self.max_bytes:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": {
+                            "code": "request_entity_too_large",
+                            "message": "Request body exceeds the allowed size limit.",
+                            "details": {"max_request_size_bytes": self.max_bytes},
+                        }
+                    },
+                )
+        return await call_next(request)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -221,11 +320,16 @@ def create_app() -> FastAPI:
     # the outermost. CORS is added last so that responses produced by the other
     # middleware (e.g. a 429 from the rate limiter) still carry CORS headers and
     # are readable by the browser.
+    app.add_middleware(MaxRequestSizeMiddleware, max_bytes=settings.max_request_size_bytes)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
     app.add_middleware(
         PublicRateLimitMiddleware,
         limit=settings.public_demo_rate_limit_per_minute,
+    )
+    app.add_middleware(
+        RateLimitMiddleware,
+        limit=settings.api_rate_limit_per_minute,
     )
     app.add_middleware(
         CORSMiddleware,
