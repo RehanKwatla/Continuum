@@ -2,7 +2,8 @@
   "name": "continuum-root",
   "private": true,
   "scripts": {
-    "dev": "npm --prefix frontend run dev"
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build"
   }
 }
 
