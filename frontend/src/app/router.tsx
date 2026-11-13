@@ -17,7 +17,7 @@ const Sources = React.lazy(() => import("@/pages/Sources"));
 const SourceLibrary = React.lazy(() => import("@/pages/SourceLibrary"));
 const SourceDetails = React.lazy(() => import("@/pages/SourceDetails"));
 const UploadSources = React.lazy(() => import("@/pages/UploadSources"));
-const GitHubRepositories = React.lazy(() => import("@/pages/GitHubRepositories"));
+const GitHubRepositories = React.lazy(() => import("@/pages/RepositoryIntelligence"));
 const Settings = React.lazy(() => import("@/pages/Settings"));
 const MemoryLayoutLazy = React.lazy(() =>
   import("@/components/intelligence/MemoryLayout").then((m) => ({ default: m.MemoryLayout })),

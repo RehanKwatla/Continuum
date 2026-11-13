@@ -233,6 +233,60 @@ class GitHubSubjectType(StrEnum):
     PULL_REQUEST = "pull_request"
 
 
+# ---------------------------------------------------------------------------
+# Repository Intelligence (public Git provider ingestion)
+# ---------------------------------------------------------------------------
+class RepositoryVisibility(StrEnum):
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
+class RepositoryIngestionStatus(StrEnum):
+    """Persisted lifecycle of one repository snapshot ingestion.
+
+    The status *is* the current stage, so progress reported to the frontend is
+    always the real backend state rather than an invented percentage.
+    """
+
+    QUEUED = "queued"
+    VALIDATING = "validating"
+    FETCHING_METADATA = "fetching_metadata"
+    FETCHING_BRANCHES = "fetching_branches"
+    FETCHING_TREE = "fetching_tree"
+    FETCHING_FILES = "fetching_files"
+    FETCHING_COMMITS = "fetching_commits"
+    FETCHING_ISSUES = "fetching_issues"
+    FETCHING_PULL_REQUESTS = "fetching_pull_requests"
+    SAVING_SNAPSHOT = "saving_snapshot"
+    COMPLETED = "completed"
+    PARTIALLY_COMPLETED = "partially_completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+#: Statuses in which an ingestion job is still running (or waiting to run).
+ACTIVE_REPOSITORY_INGESTION_STATUSES: tuple[RepositoryIngestionStatus, ...] = (
+    RepositoryIngestionStatus.QUEUED,
+    RepositoryIngestionStatus.VALIDATING,
+    RepositoryIngestionStatus.FETCHING_METADATA,
+    RepositoryIngestionStatus.FETCHING_BRANCHES,
+    RepositoryIngestionStatus.FETCHING_TREE,
+    RepositoryIngestionStatus.FETCHING_FILES,
+    RepositoryIngestionStatus.FETCHING_COMMITS,
+    RepositoryIngestionStatus.FETCHING_ISSUES,
+    RepositoryIngestionStatus.FETCHING_PULL_REQUESTS,
+    RepositoryIngestionStatus.SAVING_SNAPSHOT,
+)
+
+#: Statuses after which no further stage will run.
+TERMINAL_REPOSITORY_INGESTION_STATUSES: tuple[RepositoryIngestionStatus, ...] = (
+    RepositoryIngestionStatus.COMPLETED,
+    RepositoryIngestionStatus.PARTIALLY_COMPLETED,
+    RepositoryIngestionStatus.FAILED,
+    RepositoryIngestionStatus.CANCELLED,
+)
+
+
 GITHUB_SOURCE_TYPES: tuple[SourceType, ...] = (
     SourceType.GITHUB_COMMIT,
     SourceType.GITHUB_ISSUE,

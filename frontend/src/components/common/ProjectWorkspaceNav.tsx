@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { id: "overview", label: "Overview", to: (id: string) => `/projects/${id}` },
   { id: "sources", label: "Sources", to: (id: string) => `/projects/${id}/sources` },
+  { id: "repository-intelligence", label: "Repository Intelligence", to: (id: string) => `/projects/${id}/sources/github` },
   { id: "memory", label: "Memory", to: (id: string) => `/projects/${id}/memory` },
   { id: "review", label: "Review queue", to: (id: string) => `/projects/${id}/memory/review` },
   { id: "timeline", label: "Timeline", to: (id: string) => `/projects/${id}/memory/timeline` },
@@ -21,7 +22,8 @@ const TABS = [
 function isTabActive(id: string, projectId: string, pathname: string): boolean {
   const base = `/projects/${projectId}`;
   if (id === "overview") return pathname === base;
-  if (id === "sources") return pathname.startsWith(`${base}/sources`);
+  if (id === "sources") return pathname.startsWith(`${base}/sources`) && !pathname.startsWith(`${base}/sources/github`);
+  if (id === "repository-intelligence") return pathname.startsWith(`${base}/sources/github`);
   if (id === "memory") {
     return pathname.startsWith(`${base}/memory`) && !pathname.startsWith(`${base}/memory/timeline`) && !pathname.startsWith(`${base}/memory/review`);
   }
@@ -50,6 +52,7 @@ export function ProjectWorkspaceNav({ projectId }: { projectId: string }) {
             <NavLink
               key={tab.id}
               to={tab.to(projectId)}
+              end={tab.id === "overview" || tab.id === "sources"}
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
                 active

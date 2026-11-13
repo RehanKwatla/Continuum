@@ -24,6 +24,8 @@ from app.models.enums import (
     ProcessingStatus,
     ProjectStatus,
     ReadinessBand,
+    RepositoryIngestionStatus,
+    RepositoryVisibility,
     ReadinessDimension,
     RequirementCompletion,
     RequirementCriticality,
@@ -51,6 +53,14 @@ from app.models.processing_run import ProcessingRun
 from app.models.project import Project
 from app.models.project_memory import ProjectMemory
 from app.models.project_repository import ProjectRepository
+from app.models.repository_intelligence import (
+    CommitRecord,
+    IssueRecord,
+    PullRequestRecord,
+    RepositoryConnection,
+    RepositoryFile,
+    RepositorySnapshot,
+)
 from app.models.source import Source
 from app.models.user import User
 from app.models.verification import Verification
@@ -65,6 +75,7 @@ __all__ = [
     "ClaimRevision",
     "ClaimStatus",
     "ClaimType",
+    "CommitRecord",
     "Conflict",
     "ConflictClaim",
     "ConflictResolution",
@@ -83,6 +94,7 @@ __all__ = [
     "HandoverLifecycleStatus",
     "HandoverStatus",
     "HandoverVersion",
+    "IssueRecord",
     "KnowledgeDependency",
     "KnowledgeGap",
     "KnowledgeGapStatus",
@@ -95,9 +107,15 @@ __all__ = [
     "ProjectMemory",
     "ProjectRepository",
     "ProjectStatus",
+    "PullRequestRecord",
     "ReadinessBand",
     "ReadinessDimension",
     "ReadinessEvaluation",
+    "RepositoryConnection",
+    "RepositoryFile",
+    "RepositoryIngestionStatus",
+    "RepositorySnapshot",
+    "RepositoryVisibility",
     "RequirementCompletion",
     "RequirementCriticality",
     "ReviewDecision",

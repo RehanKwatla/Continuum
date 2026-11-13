@@ -93,6 +93,23 @@ class Settings(BaseSettings):
     github_token_encryption_key: str | None = None
     github_api_base_url: str = "https://api.github.com"
 
+    # --- Public repository analysis limits --------------------------------
+    repository_max_files: int = 80
+    repository_max_file_bytes: int = 262_144
+    repository_max_content_bytes: int = 8_388_608
+    repository_max_tree_entries: int = 5_000
+    repository_max_commits: int = 30
+    repository_max_issues: int = 50
+    repository_max_pull_requests: int = 20
+    repository_max_api_requests: int = 250
+    repository_max_duration_seconds: int = 300
+    repository_max_tree_depth: int = 20
+    repository_allowed_extensions: list[str] = [
+        ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".php",
+        ".rb", ".cs", ".cpp", ".c", ".h", ".json", ".yaml", ".yml", ".toml",
+        ".md", ".mdx", ".sql", ".html", ".css", ".scss", ".xml", ".sh",
+    ]
+
     # --- File ingestion ------------------------------------------------------
     upload_dir: str = "./storage/uploads"
     max_upload_size_bytes: int = 25 * 1024 * 1024

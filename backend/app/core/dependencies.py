@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+import re
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
@@ -29,8 +30,8 @@ from app.services.auth_service import AuthService
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
 
-#: Paths (suffix-matched) a token-less public-demo visitor may still write to.
-PUBLIC_DEMO_WRITE_ALLOWLIST: frozenset[str] = frozenset({"/public/demo/reset"})
+#: Exact endpoint suffixes a token-less public-demo visitor may still use.
+PUBLIC_DEMO_WRITE_ALLOWLIST: frozenset[str] = frozenset({"/public/demo/reset", "/repositories/validate"})
 
 
 def get_current_principal(
@@ -198,10 +199,11 @@ def public_demo_write_guard(request: Request) -> None:
     path = request.url.path
     if any(path.endswith(allowed) for allowed in PUBLIC_DEMO_WRITE_ALLOWLIST):
         return
+    if re.fullmatch(r"/api/v1/repositories/projects/[0-9a-fA-F-]{36}/analyse", path):
+        return
     raise ForbiddenError(
         "The public demonstration environment is read-only. "
-        "Browsing, inspection and the demo reset action are available; "
-        "changing records is disabled.",
+        "Browsing, inspection, demo reset, and the designated public repository analysis flow are available; other changes are disabled.",
         code="public_demo_read_only",
         details={"public_demo": True, "read_only": True},
     )
