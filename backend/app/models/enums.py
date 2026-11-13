@@ -241,6 +241,14 @@ class RepositoryVisibility(StrEnum):
     PRIVATE = "private"
 
 
+class CodeAnalysisStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    PARTIALLY_COMPLETED = "partially_completed"
+    FAILED = "failed"
+
+
 class RepositoryIngestionStatus(StrEnum):
     """Persisted lifecycle of one repository snapshot ingestion.
 

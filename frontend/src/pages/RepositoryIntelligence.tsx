@@ -30,7 +30,7 @@ type Snapshot = {
 };
 type PageData = { items: Record<string, unknown>[]; total: number; page: number; page_size: number };
 const ACTIVE = new Set(["queued", "validating", "fetching_metadata", "fetching_branches", "fetching_tree", "fetching_files", "fetching_commits", "fetching_issues", "fetching_pull_requests", "saving_snapshot"]);
-const TABS = ["Overview", "Files", "Commits", "Issues", "Pull Requests", "Analysis"] as const;
+const TABS = ["Overview", "Files", "Commits", "Issues", "Pull Requests", "Analysis", "Code Intelligence"] as const;
 type Tab = (typeof TABS)[number];
 
 function pretty(value: string) {
@@ -52,6 +52,11 @@ export default function RepositoryIntelligence() {
   const [data, setData] = React.useState<PageData | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [codeAnalysis, setCodeAnalysis] = React.useState<Record<string, any> | null>(null);
+  const [codeDetails, setCodeDetails] = React.useState<Record<string, any>>({});
+  const [codeBusy, setCodeBusy] = React.useState(false);
+  const [selectedModule, setSelectedModule] = React.useState("");
+  const [graphZoom, setGraphZoom] = React.useState(1);
   const languageSummary = metadata
     ? Object.entries(metadata.languages).sort((left, right) => right[1] - left[1]).slice(0, 5).map(([name]) => name).join(", ")
     : "";
@@ -107,6 +112,38 @@ export default function RepositoryIntelligence() {
       .catch((caught) => setError(toErrorMessage(caught)));
   }, [repoId, tab, page, snapshot?.id]);
 
+  React.useEffect(() => {
+    if (!repoId || tab !== "Code Intelligence") return;
+    const load = () => api.get<Record<string, any>>(`/repositories/${repoId}/analysis-summary`)
+      .then((response) => setCodeAnalysis(response.data))
+      .catch((caught) => setError(toErrorMessage(caught)));
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 2000);
+    return () => window.clearInterval(timer);
+  }, [repoId, tab]);
+
+  React.useEffect(() => {
+    if (!repoId || !["completed", "partially_completed"].includes(String(codeAnalysis?.status))) return;
+    let active = true;
+    void Promise.all([
+      api.get(`/repositories/${repoId}/structure`), api.get(`/repositories/${repoId}/dependencies/internal`),
+      api.get(`/repositories/${repoId}/dependencies/external`), api.get(`/repositories/${repoId}/symbols`),
+      api.get(`/repositories/${repoId}/architecture`), api.get(`/repositories/${repoId}/entry-points`),
+    ]).then((responses) => { if (active) setCodeDetails({ structure: responses[0].data, internal: responses[1].data, external: responses[2].data, symbols: responses[3].data, architecture: responses[4].data, entryPoints: responses[5].data }); })
+      .catch((caught) => { if (active) setError(toErrorMessage(caught)); });
+    return () => { active = false; };
+  }, [repoId, codeAnalysis?.status, codeAnalysis?.id]);
+
+  async function startCodeAnalysis() {
+    if (!repoId || !snapshot) return;
+    setCodeBusy(true); setError("");
+    try {
+      const response = await api.post<Record<string, any>>(`/repositories/${repoId}/code-analysis`, null, { params: { snapshot_id: snapshot.id } });
+      setCodeAnalysis(response.data);
+    } catch (caught) { setError(toErrorMessage(caught)); }
+    finally { setCodeBusy(false); }
+  }
+
   async function validate() {
     setBusy(true); setError(""); setMetadata(null); setSnapshot(null); setRepoId("");
     try {
@@ -156,6 +193,25 @@ export default function RepositoryIntelligence() {
         {snapshot.error_summary && <Alert variant="destructive">{snapshot.error_summary}</Alert>}{snapshot.warnings.map((warning) => <Alert key={warning}>{warning}</Alert>)}
       </CardContent></Card>}
       {tab === "Analysis" && <Card><CardHeader><CardTitle>Analysis run</CardTitle></CardHeader><CardContent><dl className="grid gap-3 sm:grid-cols-2">{Object.entries({ Status: snapshot.status, Stage: snapshot.stage, Branch: snapshot.branch, "Tree complete": String(snapshot.tree_complete), "Files processed": snapshot.files_processed, "Files skipped": snapshot.files_skipped }).map(([key, value]) => <div key={key}><dt className="text-xs text-muted-foreground">{key}</dt><dd className="text-sm">{String(value)}</dd></div>)}</dl></CardContent></Card>}
+      {tab === "Code Intelligence" && <div className="space-y-4">
+        <Card><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Codebase intelligence</CardTitle><p className="mt-1 text-sm text-muted-foreground">Static analysis of files already captured in snapshot {snapshot.commit_sha?.slice(0, 8) ?? snapshot.id.slice(0, 8)}.</p></div><Button onClick={() => void startCodeAnalysis()} disabled={codeBusy || ["pending", "running"].includes(String(codeAnalysis?.status)) || !["completed", "partially_completed"].includes(snapshot.status)}>{codeBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{["pending", "running"].includes(String(codeAnalysis?.status)) ? "Analysis queued" : "Analyse snapshot"}</Button></CardHeader>
+          <CardContent className="space-y-4">
+            {!codeAnalysis || codeAnalysis.status === "not_started" ? <p className="text-sm text-muted-foreground">Run analysis to extract languages, technologies, symbols, imports, entry points and an evidence-backed structure from stored source files.</p> : <>
+              <div className="flex flex-wrap gap-2"><Badge>{pretty(String(codeAnalysis.status ?? "unknown"))}</Badge>{codeAnalysis.parser_version && <Badge variant="secondary">Parser {codeAnalysis.parser_version}</Badge>}</div>
+              {codeAnalysis.languages && <section><h3 className="mb-2 text-sm font-semibold">Languages</h3><div className="flex flex-wrap gap-2">{(codeAnalysis.languages.local ?? []).map((item: any) => <Badge key={item.language} variant="secondary">{item.language} · {item.file_count} files · {item.percentage}% (local)</Badge>)}{(codeAnalysis.languages.github ?? []).map((item: any) => <Badge key={`gh-${item.language}`} variant="outline">{item.language} · {item.percentage}% (GitHub)</Badge>)}</div></section>}
+              {Array.isArray(codeAnalysis.technologies) && <section><h3 className="mb-2 text-sm font-semibold">Detected technologies</h3><div className="flex flex-wrap gap-2">{codeAnalysis.technologies.length ? codeAnalysis.technologies.map((item: any) => <Badge key={item.technology} variant="secondary">{item.technology} · {item.category} · {item.confidence}</Badge>) : <p className="text-sm text-muted-foreground">No manifest-backed technologies detected.</p>}</div></section>}
+              {codeAnalysis.architecture && <><section><h3 className="mb-2 text-sm font-semibold">Project structure</h3><p className="text-sm text-muted-foreground">{codeAnalysis.architecture.directories} directories · {codeAnalysis.architecture.files} files · {codeAnalysis.architecture.analysed_files} analysed · {codeAnalysis.architecture.skipped_files} skipped</p>{codeAnalysis.architecture.truncated && <p className="mt-1 text-xs text-amber-700">Analysis limit reached; this result covers a partial tree.</p>}</section>
+                <section><h3 className="mb-2 text-sm font-semibold">Entry points</h3>{(codeDetails.entryPoints?.items ?? codeAnalysis.entry_points ?? []).length ? <div className="space-y-1">{(codeDetails.entryPoints?.items ?? codeAnalysis.entry_points).map((item: any) => <p key={`${item.file_path}-${item.detection_method}`} className="text-sm"><code>{item.file_path}</code> · {item.detection_method} · {item.confidence}</p>)}</div> : <p className="text-sm text-muted-foreground">No conventional entry points found in analysed files.</p>}</section>
+                <section><h3 className="mb-2 text-sm font-semibold">Evidence-backed module groups</h3>{(codeAnalysis.architecture.components ?? []).length ? <div className="grid gap-2 sm:grid-cols-2">{codeAnalysis.architecture.components.map((item: any) => <div key={item.component_name} className="rounded-md border p-3"><p className="font-medium">{item.component_name}</p><p className="text-xs text-muted-foreground">{item.confidence} confidence · {item.evidence.join(" · ")}</p></div>)}</div> : <p className="text-sm text-muted-foreground">Not enough parsed source evidence to infer module groups.</p>}</section>
+                <section><h3 className="mb-2 text-sm font-semibold">Project tree</h3><details><summary className="cursor-pointer text-sm">Browse {codeDetails.structure?.files ?? codeAnalysis.architecture.files} files and {codeDetails.structure?.directories ?? codeAnalysis.architecture.directories} directories</summary><div className="mt-2 max-h-64 space-y-1 overflow-auto rounded border p-2">{(codeDetails.structure?.tree ?? codeAnalysis.architecture.tree ?? []).slice(0, 200).map((node: any) => <p key={node.node_id} className="truncate text-xs" style={{ paddingLeft: `${Math.min(node.path.split("/").length - 1, 8) * 12}px` }}><span className="text-muted-foreground">{node.node_type === "directory" ? "▸" : "·"}</span> {node.name}{node.language ? ` · ${node.language}` : ""} {node.node_type === "file" && <span className="text-muted-foreground">· {node.analysis_status}</span>}</p>)}</div></details></section>
+                <section><h3 className="mb-2 text-sm font-semibold">Module dependency graph</h3>{(() => { const graph = codeDetails.architecture; const resolved = (graph?.edges ?? []).filter((edge: any) => edge.resolution_status === "resolved"); const nodes = (graph?.nodes ?? []).filter((node: any) => resolved.some((edge: any) => edge.source === node.id || edge.target === node.id)).slice(0, 16); const nodeIndex = new Map<string, number>(nodes.map((node: any, index: number): [string, number] => [node.id, index])); return resolved.length && nodes.length ? <div className="overflow-auto rounded border p-2"><svg viewBox="0 0 760 280" className="min-w-[600px] w-full" onWheel={(event) => { event.preventDefault(); setGraphZoom((value) => Math.min(1.8, Math.max(0.65, value + (event.deltaY < 0 ? 0.1 : -0.1)))); }}><g transform={`scale(${graphZoom})`}>{resolved.map((edge: any, index: number) => { const a = nodeIndex.get(edge.source); const b = nodeIndex.get(edge.target); if (a === undefined || b === undefined) return null; return <line key={`${edge.source}-${edge.target}-${index}`} x1="80" y1={24 + a * 15} x2="680" y2={24 + b * 15} stroke={selectedModule && selectedModule !== edge.source && selectedModule !== edge.target ? "#b8b8b3" : "#2F6BFF"} strokeWidth="1.5" />; })}{nodes.map((node: any, index: number) => <g key={node.id} role="button" tabIndex={0} onClick={() => setSelectedModule(node.id)} onKeyDown={(event) => { if (event.key === "Enter") setSelectedModule(node.id); }}><circle cx={index % 2 ? 680 : 80} cy={24 + index * 15} r="5" fill={selectedModule === node.id ? "#2F6BFF" : "#D8CBB3"} /><text x={index % 2 ? 692 : 92} y={28 + index * 15} fontSize="10" fill="currentColor">{node.label.slice(0, 48)}</text></g>)}</g></svg><p className="mt-1 text-xs text-muted-foreground">Click a module to highlight its links · Scroll to zoom · {selectedModule || "No module selected"}</p></div> : <p className="text-sm text-muted-foreground">No resolved internal imports were found among the stored source files.</p>; })()}</section>
+                <section><h3 className="mb-2 text-sm font-semibold">Internal imports</h3><div className="max-h-48 space-y-1 overflow-auto">{(codeDetails.internal?.items ?? []).slice(0, 100).map((item: any) => <p key={`${item.source_file}-${item.line_number}-${item.target_module}`} className="text-xs"><code>{item.source_file}:{item.line_number}</code> → <code>{item.target_module}</code> <span className="text-muted-foreground">({item.resolution_status})</span></p>)}</div></section>
+                <section><h3 className="mb-2 text-sm font-semibold">External dependencies</h3><div className="max-h-48 space-y-1 overflow-auto">{(codeDetails.external?.items ?? []).slice(0, 100).map((item: any) => <p key={`${item.manifest_path}-${item.package_name}`} className="text-xs"><code>{item.package_name}</code> {item.declared_version ?? "version unspecified"}{item.resolved_version ? ` · resolved ${item.resolved_version}` : ""} · {item.dep_category} · {item.manifest_path}</p>)}{!codeDetails.external?.items?.length && <p className="text-sm text-muted-foreground">No supported external dependencies found.</p>}</div></section>
+                <section><h3 className="mb-2 text-sm font-semibold">Parsed symbols</h3><p className="mb-2 text-sm text-muted-foreground">{codeAnalysis.architecture.symbol_count ?? 0} symbols · Parse issues: {(codeAnalysis.architecture.errors ?? []).length}</p><div className="max-h-48 space-y-1 overflow-auto">{(codeDetails.symbols?.items ?? []).slice(0, 100).map((item: any) => <p key={`${item.file_path}-${item.start_line}-${item.symbol_name}`} className="text-xs"><span className="font-medium">{item.symbol_type} {item.symbol_name}</span> · <code>{item.file_path}:{item.start_line}-{item.end_line}</code></p>)}</div>{(codeAnalysis.architecture.errors ?? []).slice(0, 5).map((item: any, index: number) => <p key={`${item.path}-${index}`} className="text-xs text-amber-700">{item.path}:{item.line ?? "?"} {item.message}</p>)}</section>
+              </>}</>}
+          </CardContent>
+        </Card>
+      </div>}
       {["Files", "Commits", "Issues", "Pull Requests"].includes(tab) && <Card><CardHeader><CardTitle>{tab}</CardTitle></CardHeader><CardContent className="space-y-3">
         {!data ? <p className="text-sm text-muted-foreground">Loading repository records…</p> : data.items.length === 0 ? <p className="text-sm text-muted-foreground">No {tab.toLowerCase()} have been saved for this snapshot.</p> : data.items.map((row, index) => <div key={String(row.id ?? index)} className="rounded-md border p-3"><p className="font-medium">{String(row.path ?? row.title ?? row.message ?? row.commit_sha ?? "Repository item")}</p><p className="mt-1 text-xs text-muted-foreground">{String(row.analysis_status ?? row.state ?? row.committed_at ?? row.author_name ?? "")}</p>{row.skip_reason !== undefined && row.skip_reason !== null && <p className="mt-1 text-xs text-amber-700">{String(row.skip_reason)}</p>}</div>)}
         {data && data.total > data.page_size && <div className="flex items-center justify-between"><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</Button><span className="text-xs text-muted-foreground">Page {data.page} · {data.total} records</span><Button variant="outline" size="sm" disabled={page * data.page_size >= data.total} onClick={() => setPage((current) => current + 1)}>Next</Button></div>}

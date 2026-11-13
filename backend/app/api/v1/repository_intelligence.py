@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
 from app.core.dependencies import CurrentUser, DbSession, resolve_project_access
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError, UpstreamError
 from app.models.enums import ACTIVE_REPOSITORY_INGESTION_STATUSES, RepositoryIngestionStatus, WorkspaceRole
+from app.models.enums import CodeAnalysisStatus
+from app.models.code_intelligence import ArchitectureComponent, CodeAnalysisRun, CodeSymbol, EntryPoint, ExternalDependency, LanguageStatistic, ModuleDependency, TechnologyDetection
 from app.models.repository_intelligence import (
     CommitRecord, IssueRecord, PullRequestRecord, RepositoryConnection, RepositorySnapshot,
     RepositoryFile,
@@ -23,8 +26,120 @@ from app.services.public_github import GitHubApiError, RepositoryUrlError
 from app.services.repository_intelligence import (
     connection_payload, paged_records, run_snapshot, snapshot_payload, validate_repository_url,
 )
+from app.services.code_analysis.parser import PARSER_VERSION
+from app.services.code_analysis.service import run_code_analysis, run_payload
 
 router = APIRouter(prefix="/repositories", tags=["repository-intelligence"])
+
+
+def _code_run(db, repository_id, user, run_id=None):
+    _connection(db, repository_id, user)
+    if run_id:
+        run = db.get(CodeAnalysisRun, run_id)
+        if not run:
+            raise NotFoundError("Code analysis run not found.")
+        snapshot = db.get(RepositorySnapshot, run.snapshot_id)
+        if not snapshot or snapshot.repository_connection_id != repository_id:
+            raise NotFoundError("Code analysis run not found.")
+        return run
+    return db.scalar(select(CodeAnalysisRun).join(RepositorySnapshot).where(RepositorySnapshot.repository_connection_id == repository_id).order_by(CodeAnalysisRun.created_at.desc()).limit(1))
+
+
+@router.post("/{repository_id}/code-analysis", status_code=status.HTTP_202_ACCEPTED)
+def start_code_analysis(repository_id: uuid.UUID, background_tasks: BackgroundTasks, user: CurrentUser, db: DbSession, snapshot_id: uuid.UUID | None = None):
+    _connection(db, repository_id, user)
+    snapshot = db.get(RepositorySnapshot, snapshot_id) if snapshot_id else db.scalar(select(RepositorySnapshot).where(RepositorySnapshot.repository_connection_id == repository_id).order_by(RepositorySnapshot.created_at.desc()).limit(1))
+    if not snapshot or snapshot.repository_connection_id != repository_id:
+        raise NotFoundError("Repository snapshot not found.")
+    if snapshot.ingestion_status not in {RepositoryIngestionStatus.COMPLETED, RepositoryIngestionStatus.PARTIALLY_COMPLETED}:
+        raise ConflictError("Code analysis requires a completed repository snapshot.")
+    run = db.scalar(select(CodeAnalysisRun).where(CodeAnalysisRun.snapshot_id == snapshot.id, CodeAnalysisRun.parser_version == PARSER_VERSION))
+    if run is None:
+        run = CodeAnalysisRun(snapshot_id=snapshot.id, parser_version=PARSER_VERSION, status=CodeAnalysisStatus.PENDING)
+        db.add(run)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            run = db.scalar(select(CodeAnalysisRun).where(CodeAnalysisRun.snapshot_id == snapshot.id, CodeAnalysisRun.parser_version == PARSER_VERSION))
+    if run.status in {CodeAnalysisStatus.PENDING, CodeAnalysisStatus.FAILED}:
+        run.status = CodeAnalysisStatus.RUNNING
+        run.started_at = datetime.now(timezone.utc)
+        run.completed_at = None
+        db.commit()
+        background_tasks.add_task(run_code_analysis, run.id)
+    return run_payload(run)
+
+
+@router.get("/{repository_id}/code-analysis/{analysis_id}")
+def get_code_analysis(repository_id: uuid.UUID, analysis_id: uuid.UUID, user: CurrentUser, db: DbSession):
+    run = _code_run(db, repository_id, user, analysis_id)
+    return run_payload(run)
+
+
+def _analysis_records(repository_id, user, db, model, run_id=None, page=1, page_size=50):
+    run = _code_run(db, repository_id, user, run_id)
+    if not run:
+        return {"items": [], "page": page, "page_size": page_size, "total": 0}
+    query = select(model).where(model.analysis_run_id == run.id)
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    rows = db.scalars(query.order_by(model.created_at).offset((page - 1) * page_size).limit(page_size)).all()
+    items = [{column.key: getattr(row, column.key) for column in model.__table__.columns if column.key != "created_at"} for row in rows]
+    return {"items": items, "page": page, "page_size": page_size, "total": total, "analysis_id": run.id}
+
+
+@router.get("/{repository_id}/languages")
+def code_languages(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None):
+    run = _code_run(db, repository_id, user, analysis_id)
+    return {"items": [] if not run else db.scalars(select(LanguageStatistic).where(LanguageStatistic.analysis_run_id == run.id)).all(), "analysis_id": run.id if run else None, "summary": run.languages_summary if run else {}}
+
+
+@router.get("/{repository_id}/technologies")
+def code_technologies(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None):
+    return _analysis_records(repository_id, user, db, TechnologyDetection, analysis_id)
+
+
+@router.get("/{repository_id}/structure")
+def code_structure(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None):
+    run = _code_run(db, repository_id, user, analysis_id)
+    return run.architecture_summary if run else {"tree": [], "files": 0, "directories": 0, "analysed_files": 0, "skipped_files": 0, "category_counts": {}}
+
+
+@router.get("/{repository_id}/entry-points")
+def code_entry_points(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None):
+    return _analysis_records(repository_id, user, db, EntryPoint, analysis_id)
+
+
+@router.get("/{repository_id}/symbols")
+def code_symbols(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100)):
+    return _analysis_records(repository_id, user, db, CodeSymbol, analysis_id, page, page_size)
+
+
+@router.get("/{repository_id}/dependencies/internal")
+def code_internal_dependencies(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100)):
+    return _analysis_records(repository_id, user, db, ModuleDependency, analysis_id, page, page_size)
+
+
+@router.get("/{repository_id}/dependencies/external")
+def code_external_dependencies(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None, page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=100)):
+    return _analysis_records(repository_id, user, db, ExternalDependency, analysis_id, page, page_size)
+
+
+@router.get("/{repository_id}/architecture")
+def code_architecture(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None):
+    run = _code_run(db, repository_id, user, analysis_id)
+    if not run:
+        return {"items": [], "nodes": [], "edges": [], "analysis_id": None}
+    components = db.scalars(select(ArchitectureComponent).where(ArchitectureComponent.analysis_run_id == run.id)).all()
+    edges = db.scalars(select(ModuleDependency).where(ModuleDependency.analysis_run_id == run.id)).all()
+    graph_nodes = {name for edge in edges for name in (edge.source_file, edge.target_file or edge.target_module)}
+    return {"items": [{"component_name": c.component_name, "category": c.category, "confidence": c.confidence, "evidence": c.evidence, "file_paths": c.file_paths, "connected_components": c.connected_components} for c in components], "nodes": [{"id": name, "label": name, "category": "module"} for name in sorted(graph_nodes)], "edges": [{"source": e.source_file, "target": e.target_file or e.target_module, "relationship": e.relationship_type, "resolution_status": e.resolution_status, "evidence": [e.source_file, e.line_number]} for e in edges], "analysis_id": run.id}
+
+
+@router.get("/{repository_id}/analysis-summary")
+def code_analysis_summary(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, analysis_id: uuid.UUID | None = None):
+    run = _code_run(db, repository_id, user, analysis_id)
+    return run_payload(run) if run else {"status": "not_started", "message": "Start code analysis after a repository snapshot completes."}
 
 
 def _error(exc: Exception):

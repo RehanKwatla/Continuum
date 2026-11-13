@@ -75,4 +75,24 @@ describe("Repository Intelligence", () => {
     expect(await screen.findByText("Only public GitHub repositories are supported.")).toBeInTheDocument();
     expect(screen.queryByText("fastapi/fastapi")).not.toBeInTheDocument();
   });
+
+  it("shows code intelligence for an already saved snapshot and explains empty analysis state", async () => {
+    mocks.get.mockImplementation((url: string) => {
+      if (url === "/repositories/projects/project-1") return Promise.resolve({ data: { items: [{
+        id: "repo-id", owner: "fastapi", repository_name: "fastapi", repository_url: "https://github.com/fastapi/fastapi",
+        default_branch: "master", selected_branch: "master", branches: [], languages: {}, latest_snapshot: {
+          id: "snapshot-id", repository_id: "repo-id", branch: "master", commit_sha: "abc12345", status: "completed", stage: "completed",
+          tree_complete: true, files_discovered: 8, files_processed: 8, files_skipped: 0, commits_processed: 0, issues_processed: 0,
+          pull_requests_processed: 0, warnings: [], error_summary: null,
+        },
+      }] } });
+      if (url === "/repositories/repo-id/analysis-summary") return Promise.resolve({ data: { status: "not_started" } });
+      return Promise.resolve({ data: { items: [] } });
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Code Intelligence" }));
+    expect(await screen.findByText("Codebase intelligence")).toBeInTheDocument();
+    expect(await screen.findByText(/Run analysis to extract languages/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Analyse snapshot" })).toBeEnabled();
+  });
 });

@@ -6,6 +6,7 @@ from app.models.claim_history import ClaimHistory
 from app.models.claim_revision import ClaimDecision, ClaimRevision
 from app.models.conflict import Conflict, ConflictClaim
 from app.models.enums import (
+    CodeAnalysisStatus,
     AccessLabel,
     ClaimStatus,
     ClaimType,
@@ -37,6 +38,16 @@ from app.models.enums import (
     VerificationVerdict,
     WorkspaceRole,
 )
+from app.models.code_intelligence import (
+    ArchitectureComponent,
+    CodeAnalysisRun,
+    CodeSymbol,
+    EntryPoint,
+    ExternalDependency,
+    LanguageStatistic,
+    ModuleDependency,
+    TechnologyDetection,
+)
 from app.models.evidence import Evidence
 from app.models.evidence_span import EvidenceSpan
 from app.models.github_connection import GitHubConnection
@@ -67,6 +78,10 @@ from app.models.verification import Verification
 from app.models.workspace import Workspace, WorkspaceMember
 
 __all__ = [
+    "ArchitectureComponent",
+    "CodeAnalysisRun",
+    "CodeAnalysisStatus",
+    "CodeSymbol",
     "AccessLabel",
     "AuditLog",
     "Claim",
@@ -83,6 +98,8 @@ __all__ = [
     "DependencyRiskStatus",
     "EvaluationKind",
     "EvaluationRun",
+    "EntryPoint",
+    "ExternalDependency",
     "Evidence",
     "EvidenceSpan",
     "ExerciseOutcome",
@@ -98,6 +115,8 @@ __all__ = [
     "KnowledgeDependency",
     "KnowledgeGap",
     "KnowledgeGapStatus",
+    "LanguageStatistic",
+    "ModuleDependency",
     "OpenQuestion",
     "OpenQuestionStatus",
     "ProcessingRun",
@@ -125,6 +144,7 @@ __all__ = [
     "SuccessorTask",
     "SuccessorTaskPriority",
     "SuccessorTaskStatus",
+    "TechnologyDetection",
     "User",
     "Verification",
     "VerificationVerdict",
