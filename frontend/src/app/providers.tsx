@@ -2,6 +2,7 @@ import * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/components/ui/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { ApiClientError } from "@/services/api";
 
@@ -29,9 +30,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = React.useState(createQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <AuthProvider>{children}</AuthProvider>
-      </ToastProvider>
+      <ThemeProvider defaultTheme="system">
+        <ToastProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

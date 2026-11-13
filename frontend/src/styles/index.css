@@ -18,7 +18,37 @@
  *   Dark Text:           #17101A (High-Contrast Text on Soft Orchid)
  */
 @layer base {
-  :root,
+  :root {
+    /* Light theme — neutral paper base */
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --sidebar: 0 0% 96%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --canvas: 0 0% 100%;
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 262.1 83.3% 57.8%;
+    --sand: 0 0% 100%;
+    --status-ok: 160 84% 39%;
+    --status-warn: 43 96% 56%;
+    --status-danger: 0 84% 60%;
+    --status-info: 315 33% 69%;
+    --radius: 0.625rem;
+  }
+
   .dark {
     /* Midnight Black #100E14 */
     --background: 260 18% 7%;
@@ -113,6 +143,10 @@
     background-attachment: fixed;
     min-height: 100vh;
     overflow-x: hidden;
+  }
+
+  :not(.dark) body {
+    background: hsl(var(--background));
   }
 
   h1,

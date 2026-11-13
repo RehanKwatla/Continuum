@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/common/Tooltip";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHealth } from "@/hooks/use-dashboard";
@@ -144,6 +145,8 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
             Development session
           </Badge>
         ) : null}
+
+        <ThemeToggle />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
