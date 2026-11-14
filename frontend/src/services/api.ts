@@ -15,16 +15,20 @@ export class ApiClientError extends Error {
   readonly code: string;
   readonly status: number | null;
   readonly details: Record<string, unknown>;
+  readonly requestId: string | null;
+  readonly retryAfterSeconds: number | null;
 
   constructor(
     message: string,
-    options: { code?: string; status?: number | null; details?: Record<string, unknown> } = {},
+    options: { code?: string; status?: number | null; details?: Record<string, unknown>; requestId?: string | null; retryAfterSeconds?: number | null } = {},
   ) {
     super(message);
     this.name = "ApiClientError";
     this.code = options.code ?? "unknown_error";
     this.status = options.status ?? null;
     this.details = options.details ?? {};
+    this.requestId = options.requestId ?? null;
+    this.retryAfterSeconds = options.retryAfterSeconds ?? null;
   }
 
   /** True when the server refused the credentials rather than the request. */
@@ -71,11 +75,22 @@ api.interceptors.response.use(
       message = error.message || `Request failed with status ${status}.`;
     }
 
+    const headerRequestId = error.response?.headers?.["x-request-id"];
+    const requestId = typeof details.request_id === "string"
+      ? details.request_id
+      : typeof headerRequestId === "string" ? headerRequestId : null;
+    if (requestId) details.request_id = requestId;
+    const retryHeader = error.response?.headers?.["retry-after"];
+    const retryRaw = details.retry_after_seconds ?? retryHeader;
+    const parsedRetry = retryRaw === undefined ? NaN : Number(retryRaw);
+    const retryAfterSeconds = Number.isFinite(parsedRetry) && parsedRetry >= 0 ? parsedRetry : null;
+    if (retryAfterSeconds !== null) details.retry_after_seconds = retryAfterSeconds;
+
     if (status === 401) {
       emitUnauthorized();
     }
 
-    return Promise.reject(new ApiClientError(message, { code, status, details }));
+    return Promise.reject(new ApiClientError(message, { code, status, details, requestId, retryAfterSeconds }));
   },
 );
 

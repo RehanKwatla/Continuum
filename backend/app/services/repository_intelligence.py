@@ -360,12 +360,20 @@ def run_snapshot(snapshot_id: uuid.UUID):
         if snap:
             has_results = bool(snap.files_processed or snap.commits_processed or snap.issues_processed or snap.pull_requests_processed)
             snap.ingestion_status = Status.PARTIALLY_COMPLETED if has_results else Status.FAILED
-            snap.error_summary = str(exc)[:500] if isinstance(exc, (ValueError, GitHubApiError)) else "Repository analysis failed. Retry the analysis later."
+            if isinstance(exc, GitHubApiError):
+                message = str(exc)
+                if exc.retry_at:
+                    message += f" Retry after Unix time {exc.retry_at}."
+                if exc.request_id:
+                    message += f" GitHub request ID: {exc.request_id}."
+                snap.error_summary = message[:500]
+            else:
+                snap.error_summary = str(exc)[:500] if isinstance(exc, ValueError) else "Repository analysis failed. Retry the analysis later."
             if has_results:
                 snap.warnings = [*(snap.warnings or []), "Analysis stopped after a partial result was saved."]
             snap.completed_at = datetime.now(timezone.utc)
             db.commit()
-        logger.warning("Repository snapshot failed id=%s error=%s", snapshot_id, type(exc).__name__)
+        logger.warning("Repository snapshot failed id=%s error=%s upstream_request_id=%s", snapshot_id, getattr(exc, "code", type(exc).__name__), getattr(exc, "request_id", None))
     finally:
         connector.close()
         db.close()

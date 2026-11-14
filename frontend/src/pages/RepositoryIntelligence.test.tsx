@@ -5,11 +5,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), useProject: vi.fn() }));
 vi.mock("@/services/api", () => ({
   api: { get: mocks.get, post: mocks.post },
+  ApiClientError: class ApiClientError extends Error {
+    code: string; status: number | null; details: Record<string, unknown>; requestId: string | null; retryAfterSeconds: number | null;
+    constructor(message: string, options: { code?: string; status?: number | null; details?: Record<string, unknown>; requestId?: string | null; retryAfterSeconds?: number | null } = {}) {
+      super(message); this.code = options.code ?? "unknown_error"; this.status = options.status ?? null;
+      this.details = options.details ?? {}; this.requestId = options.requestId ?? null;
+      this.retryAfterSeconds = options.retryAfterSeconds ?? null;
+    }
+  },
   toErrorMessage: (error: unknown) => error instanceof Error ? error.message : "Request failed",
 }));
 vi.mock("@/hooks/use-projects", () => ({ useProject: mocks.useProject }));
 
 import RepositoryIntelligence from "@/pages/RepositoryIntelligence";
+import { ApiClientError } from "@/services/api";
 
 const VALIDATION = {
   data: {
@@ -74,6 +83,22 @@ describe("Repository Intelligence", () => {
 
     expect(await screen.findByText("Only public GitHub repositories are supported.")).toBeInTheDocument();
     expect(screen.queryByText("fastapi/fastapi")).not.toBeInTheDocument();
+  });
+
+  it("preserves validated details and explains a GitHub cooldown for manual retry", async () => {
+    const retryAt = Math.floor(Date.now() / 1000) + 90;
+    mocks.post.mockResolvedValueOnce(VALIDATION).mockRejectedValueOnce(new ApiClientError("Rate limited", {
+      code: "github_rate_limited", status: 429, details: { retry_at: retryAt }, requestId: "req-demo-123",
+    }));
+    renderPage();
+    fireEvent.change(screen.getByLabelText("GitHub repository URL"), { target: { value: "https://github.com/fastapi/fastapi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Validate repository" }));
+    expect(await screen.findByText("fastapi/fastapi")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Validate repository" }));
+    expect(await screen.findByText(/GitHub rate limited repository requests/)).toBeInTheDocument();
+    expect(screen.getByText("fastapi/fastapi")).toBeInTheDocument();
+    expect(screen.getByText(/req-demo-123/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry request" })).toBeDisabled();
   });
 
   it("shows code intelligence for an already saved snapshot and explains empty analysis state", async () => {

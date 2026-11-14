@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
 from app.core.dependencies import CurrentUser, DbSession, resolve_project_access
-from app.core.errors import ConflictError, ForbiddenError, NotFoundError, ValidationAppError, UpstreamError
+from app.core.errors import ConflictError, ForbiddenError, NotConfiguredError, NotFoundError, RateLimitError, ValidationAppError, UpstreamError
 from app.models.enums import ACTIVE_REPOSITORY_INGESTION_STATUSES, RepositoryIngestionStatus, WorkspaceRole
 from app.models.enums import CodeAnalysisStatus
 from app.models.code_intelligence import ArchitectureComponent, CodeAnalysisRun, CodeSymbol, EntryPoint, ExternalDependency, LanguageStatistic, ModuleDependency, TechnologyDetection
@@ -411,10 +411,17 @@ def _error(exc: Exception):
         raise ValidationAppError(str(exc)) from exc
     if isinstance(exc, GitHubApiError):
         if exc.status == 404:
-            raise NotFoundError(str(exc)) from exc
+            raise NotFoundError(str(exc), code=exc.code, details={"upstream_request_id": exc.request_id}) from exc
         if exc.status == 429:
-            raise UpstreamError(str(exc), code="github_rate_limited") from exc
-        raise UpstreamError(str(exc), code="github_api_error", details={"status_code": exc.status}) from exc
+            details = {"retry_after_seconds": exc.retry_after_seconds, "retry_at": exc.retry_at, "upstream_request_id": exc.request_id}
+            raise RateLimitError(str(exc), code="github_rate_limited", details=details) from exc
+        if exc.status == 403:
+            raise ForbiddenError(str(exc), code=exc.code, details={"upstream_request_id": exc.request_id}) from exc
+        if exc.status == 401:
+            raise NotConfiguredError(str(exc), code=exc.code, details={"upstream_request_id": exc.request_id}) from exc
+        if exc.status >= 500:
+            raise UpstreamError(str(exc), code=exc.code, status_code=503, details={"retry_after_seconds": exc.retry_after_seconds, "upstream_request_id": exc.request_id}) from exc
+        raise ValidationAppError(str(exc), code=exc.code, details={"upstream_request_id": exc.request_id}) from exc
     raise exc
 
 
@@ -441,7 +448,10 @@ def analyse_repository(
         settings = get_settings()
         workspace = db.get(Workspace, project.workspace_id)
         if not settings.public_demo_mode or not workspace or workspace.name != settings.public_demo_workspace_name:
-            raise ForbiddenError("Public repository analysis is available only in the designated demo workspace.")
+            raise ForbiddenError(
+                "Public repository analysis is available only from a project in the designated Public Demo workspace.",
+                code="public_demo_analysis_workspace_required",
+            )
     try:
         parsed, metadata, branches, selected = validate_repository_url(payload.repository_url)
     except (RepositoryUrlError, GitHubApiError) as exc:

@@ -155,7 +155,7 @@ class PublicRateLimitMiddleware(BaseHTTPMiddleware):
                                 "Too many requests to the public demo. "
                                 "Please slow down and try again shortly."
                             ),
-                            "details": {"retry_after_seconds": retry_after},
+                            "details": {"retry_after_seconds": retry_after, "request_id": getattr(request.state, "request_id", None)},
                         }
                     },
                     headers={"Retry-After": str(retry_after)},
@@ -218,7 +218,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                             "message": (
                                 "Too many requests. Please slow down and try again shortly."
                             ),
-                            "details": {"retry_after_seconds": retry_after},
+                            "details": {"retry_after_seconds": retry_after, "request_id": getattr(request.state, "request_id", None)},
                         }
                     },
                     headers={"Retry-After": str(retry_after)},

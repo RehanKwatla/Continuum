@@ -1,3 +1,4 @@
+
 """Comprehensive test suite for Continuum Public Judge Access Mode.
 
 Validates all 15 acceptance checks demanded by the CodeZen hackathon brief:
@@ -21,11 +22,13 @@ Validates all 15 acceptance checks demanded by the CodeZen hackathon brief:
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.core.security import DEMO_EMAIL, DEMO_PROVIDER
+import app.api.v1.repository_intelligence as repository_routes
 
 
 @pytest.fixture(autouse=True)
@@ -197,6 +200,35 @@ class TestPublicJudgeAccessMode:
         resp = client.get(f"/api/v1/projects/{random_project_id}")
         assert resp.status_code == 404
         assert resp.json()["error"]["code"] == "not_found"
+
+    def test_public_demo_repository_analysis_is_scoped_to_demo_project(
+        self, client: TestClient, demo_data: dict, monkeypatch
+    ):
+        """The anonymous demo principal may analyze the seeded project only."""
+        metadata = {
+            "name": "sample", "owner": "continuum-demo", "description": "Demo repository",
+            "canonical_url": "https://github.com/continuum-demo/sample", "default_branch": "main",
+            "visibility": "public", "language": "Python", "languages": {"Python": 1000},
+            "stars": 12, "forks": 2, "open_issues": 1, "created_at": None,
+            "updated_at": None, "pushed_at": None, "license": "MIT",
+        }
+        branches = [{"name": "main", "commit_sha": "abc123", "protected": False, "is_default": True}]
+        monkeypatch.setattr(repository_routes, "validate_repository_url", lambda _url: (
+            SimpleNamespace(owner="continuum-demo", name="sample"), metadata, branches, "main"
+        ))
+        monkeypatch.setattr(repository_routes, "run_snapshot", lambda _snapshot_id: None)
+
+        response = client.post(
+            f"/api/v1/repositories/projects/{demo_data['project_id']}/analyse",
+            json={"repository_url": "https://github.com/continuum-demo/sample", "branch": "main"},
+        )
+        assert response.status_code == 202, response.text
+
+        private_response = client.post(
+            f"/api/v1/repositories/projects/{uuid.uuid4()}/analyse",
+            json={"repository_url": "https://github.com/continuum-demo/sample", "branch": "main"},
+        )
+        assert private_response.status_code == 404
 
     def test_14_public_visitors_cannot_modify_protected_data(
         self, client: TestClient, demo_data: dict

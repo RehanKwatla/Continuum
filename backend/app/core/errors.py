@@ -88,14 +88,20 @@ def error_body(code: str, message: str, details: dict[str, Any] | None = None) -
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
-    async def _app_error(_: Request, exc: AppError) -> JSONResponse:
+    async def _app_error(request: Request, exc: AppError) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", None)
+        details = {**exc.details}
+        if request_id:
+            details["request_id"] = request_id
+        headers = {"Retry-After": str(details["retry_after_seconds"])} if exc.status_code == 429 and details.get("retry_after_seconds") is not None else None
         return JSONResponse(
             status_code=exc.status_code,
-            content=error_body(exc.code, exc.message, exc.details),
+            content=error_body(exc.code, exc.message, details),
+            headers=headers,
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         detail = exc.detail if isinstance(exc.detail, str) else "HTTP error"
         code = {
             401: "unauthorized",
@@ -105,29 +111,36 @@ def register_exception_handlers(app: FastAPI) -> None:
             409: "conflict",
             429: "rate_limited",
         }.get(exc.status_code, "http_error")
+        request_id = getattr(request.state, "request_id", None)
+        details = {"request_id": request_id} if request_id else {}
         return JSONResponse(
             status_code=exc.status_code,
-            content=error_body(code, detail),
+            content=error_body(code, detail, details),
             headers=getattr(exc, "headers", None),
         )
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+    async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", None)
+        details = {"issues": _jsonable_errors(exc.errors())}
+        if request_id:
+            details["request_id"] = request_id
         return JSONResponse(
             status_code=422,
             content=error_body(
                 "validation_error",
                 "Request payload failed validation.",
-                {"issues": _jsonable_errors(exc.errors())},
+                details,
             ),
         )
 
     @app.exception_handler(Exception)
-    async def _unhandled(_: Request, exc: Exception) -> JSONResponse:
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         logger.exception("Unhandled server error: %s", type(exc).__name__)
+        request_id = getattr(request.state, "request_id", None)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=error_body("internal_error", "An unexpected server error occurred."),
+            content=error_body("internal_error", "An unexpected server error occurred.", {"request_id": request_id} if request_id else {}),
         )
 
 

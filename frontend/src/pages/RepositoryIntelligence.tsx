@@ -13,7 +13,7 @@ import { ProjectWorkspaceNav } from "@/components/common/ProjectWorkspaceNav";
 import { useProject } from "@/hooks/use-projects";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { api } from "@/services/api";
-import { toErrorMessage } from "@/services/api";
+import { ApiClientError, toErrorMessage } from "@/services/api";
 
 type Branch = { name: string; commit_sha: string; protected: boolean; is_default: boolean };
 type Repository = {
@@ -37,6 +37,40 @@ function pretty(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter: string) => letter.toUpperCase());
 }
 
+function repositoryFailure(error: unknown, operation: "validate" | "analyse"): { message: string; retryAt: number | null; requestId: string | null } {
+  if (!(error instanceof ApiClientError)) return { message: toErrorMessage(error), retryAt: null, requestId: null };
+  const retryAtDetail = Number(error.details.retry_at);
+  const retryAt = Number.isFinite(retryAtDetail) && retryAtDetail > 0
+    ? retryAtDetail
+    : error.retryAfterSeconds !== null ? Math.floor(Date.now() / 1000) + error.retryAfterSeconds : null;
+  let message = error.message;
+  if (error.code === "github_rate_limited") {
+    message = retryAt
+      ? `GitHub rate limited repository requests. You can retry after ${new Date(retryAt * 1000).toLocaleTimeString()}.`
+      : "GitHub rate limited repository requests. Wait briefly, then retry.";
+  } else if (error.status === 429) {
+    message = retryAt
+      ? `Continuum rate limited this request. You can retry after ${new Date(retryAt * 1000).toLocaleTimeString()}.`
+      : "Continuum rate limited this request. Wait briefly, then retry.";
+  } else if (error.code === "public_demo_read_only") {
+    message = "Repository analysis is disabled for this Public Demo session. Use the designated demo project or sign in to a workspace where you have member access.";
+  } else if (error.code === "github_access_denied") {
+    message = "GitHub denied access to this repository. Confirm it is public and that the repository owner allows API access.";
+  } else if (error.code === "public_demo_analysis_workspace_required" || error.status === 403) {
+    message = "You do not have analysis permission for this project. Switch to the designated Public Demo project or a workspace where you are a member.";
+  } else if (error.status === 404 && operation === "analyse") {
+    message = "This project is no longer available in the selected workspace. Refresh the workspace and retry.";
+  } else if (error.status === 404 || error.code === "github_repository_unavailable") {
+    message = "No accessible public GitHub repository was found at that URL. Private repositories are not available through this connector.";
+  } else if (error.status !== null && error.status >= 500) {
+    message = "The repository service or GitHub is temporarily unavailable. Your repository details are still shown; retry the request shortly.";
+  } else if (error.status === 401) {
+    message = "Your session is not authorized for this workspace. Sign in again or switch to the Public Demo project.";
+  }
+  if (error.requestId) message += ` Request ID: ${error.requestId}.`;
+  return { message, retryAt, requestId: error.requestId };
+}
+
 export default function RepositoryIntelligence() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
@@ -52,6 +86,11 @@ export default function RepositoryIntelligence() {
   const [data, setData] = React.useState<PageData | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [retryKind, setRetryKind] = React.useState<"validate" | "analyse" | null>(null);
+  const [retryAt, setRetryAt] = React.useState<number | null>(null);
+  const [retryClock, setRetryClock] = React.useState(() => Math.floor(Date.now() / 1000));
+  const [validatedUrl, setValidatedUrl] = React.useState("");
+  const busyRef = React.useRef(false);
   const [codeAnalysis, setCodeAnalysis] = React.useState<Record<string, any> | null>(null);
   const [codeDetails, setCodeDetails] = React.useState<Record<string, any>>({});
   const [codeBusy, setCodeBusy] = React.useState(false);
@@ -74,6 +113,12 @@ export default function RepositoryIntelligence() {
   const languageSummary = metadata
     ? Object.entries(metadata.languages).sort((left, right) => right[1] - left[1]).slice(0, 5).map(([name]) => name).join(", ")
     : "";
+
+  React.useEffect(() => {
+    if (!retryAt) return;
+    const timer = window.setInterval(() => setRetryClock(Math.floor(Date.now() / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [retryAt]);
 
   React.useEffect(() => {
     if (!projectId) return;
@@ -237,24 +282,33 @@ export default function RepositoryIntelligence() {
   }
 
   async function validate() {
-    setBusy(true); setError(""); setMetadata(null); setSnapshot(null); setRepoId("");
+    if (busyRef.current || !url.trim()) return;
+    busyRef.current = true;
+    setBusy(true); setError(""); setRetryKind(null); setRetryAt(null);
     try {
       const response = await api.post<{ repository: Repository; branches: Branch[]; selected_branch: string }>("/repositories/validate", { repository_url: url });
       setMetadata(response.data.repository); setBranches(response.data.branches); setBranch(response.data.selected_branch);
-    } catch (caught) { setError(toErrorMessage(caught)); }
-    finally { setBusy(false); }
+      setValidatedUrl(url.trim()); setRetryKind(null); setRetryAt(null);
+    } catch (caught) {
+      const failure = repositoryFailure(caught, "validate");
+      setError(failure.message); setRetryAt(failure.retryAt); setRetryKind("validate");
+    } finally { busyRef.current = false; setBusy(false); }
   }
 
   async function analyse() {
-    if (!projectId || !metadata) return;
-    setBusy(true); setError("");
+    if (busyRef.current || !projectId || !metadata) return;
+    busyRef.current = true;
+    setBusy(true); setError(""); setRetryKind(null); setRetryAt(null);
     try {
       const response = await api.post<{ repository_id: string; analysis_run_id: string; status: string; stage: string }>(`/repositories/projects/${projectId}/analyse`, { repository_url: metadata.canonical_url, branch });
       setRepoId(response.data.repository_id);
       setSnapshot({ id: response.data.analysis_run_id, repository_id: response.data.repository_id, branch, commit_sha: null, status: response.data.status, stage: response.data.stage, tree_complete: false, files_discovered: 0, files_processed: 0, files_skipped: 0, commits_processed: 0, issues_processed: 0, pull_requests_processed: 0, warnings: [], error_summary: null });
       setTab("Overview");
-    } catch (caught) { setError(toErrorMessage(caught)); }
-    finally { setBusy(false); }
+      setRetryKind(null); setRetryAt(null);
+    } catch (caught) {
+      const failure = repositoryFailure(caught, "analyse");
+      setError(failure.message); setRetryAt(failure.retryAt); setRetryKind("analyse");
+    } finally { busyRef.current = false; setBusy(false); }
   }
 
   return <div className="space-y-6">
@@ -263,11 +317,11 @@ export default function RepositoryIntelligence() {
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><Github className="h-5 w-5" />Connect a public repository</CardTitle><p className="text-sm text-muted-foreground">Paste a repository URL to retrieve its metadata and available branches from GitHub.</p></CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <div className="space-y-2"><Label htmlFor="repo-url">GitHub repository URL</Label><Input id="repo-url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/owner/repository" onKeyDown={(event) => { if (event.key === "Enter") void validate(); }} /></div>
+          <div className="space-y-2"><Label htmlFor="repo-url">GitHub repository URL</Label><Input id="repo-url" value={url} onChange={(event) => { const next = event.target.value; setUrl(next); if (next.trim() !== validatedUrl) { setMetadata(null); setBranches([]); setBranch(""); setRepoId(""); setSnapshot(null); setValidatedUrl(""); } }} placeholder="https://github.com/owner/repository" onKeyDown={(event) => { if (event.key === "Enter") void validate(); }} /></div>
           <Button className="self-end" disabled={busy || !url.trim()} onClick={() => void validate()}>{busy && !metadata ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}Validate repository</Button>
         </div>
         <p className="text-xs text-muted-foreground">Public repositories only · Example: https://github.com/fastapi/fastapi</p>
-        {error && <Alert variant="destructive">{error}</Alert>}
+        {error && <Alert variant="destructive">{error}{retryAt ? <p className="mt-1">Retry available {retryAt <= retryClock ? "now" : `in ${retryAt - retryClock}s`}.</p> : null}{retryKind ? <Button className="mt-2" size="sm" variant="outline" disabled={busy || Boolean(retryAt && retryAt > retryClock)} onClick={() => { const action = retryKind; setRetryKind(null); if (action === "validate") void validate(); else void analyse(); }}>Retry request</Button> : null}</Alert>}
         {metadata && <div className="rounded-lg border p-4">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{metadata.owner}/{metadata.name}</h3><p className="mt-1 text-sm text-muted-foreground">{metadata.description || "No description provided by GitHub."}</p></div><a href={metadata.canonical_url} target="_blank" rel="noreferrer" className="text-sm text-primary">Open on GitHub <ExternalLink className="inline h-3.5 w-3.5" /></a></div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs"><Badge variant="secondary">Public</Badge><Badge variant="secondary">Default: {metadata.default_branch}</Badge>{metadata.language && <Badge variant="secondary">{metadata.language}</Badge>}{languageSummary && <Badge variant="secondary">Languages: {languageSummary}</Badge>}<Badge variant="secondary">★ {metadata.stars}</Badge><Badge variant="secondary">⑂ {metadata.forks}</Badge><Badge variant="secondary">{metadata.open_issues} open issues</Badge>{metadata.license && <Badge variant="secondary">{metadata.license}</Badge>}{metadata.created_at && <Badge variant="secondary">Created {new Date(metadata.created_at).toLocaleDateString()}</Badge>}{metadata.updated_at && <Badge variant="secondary">Updated {new Date(metadata.updated_at).toLocaleDateString()}</Badge>}{metadata.pushed_at && <Badge variant="secondary">Pushed {new Date(metadata.pushed_at).toLocaleDateString()}</Badge>}</div>

@@ -39,3 +39,7 @@ services:
           property: connectionString
       - key: CORS_ORIGINS
         value: https://continui.vercel.app,http://localhost:5173
+      # Set this server-side in the Render dashboard. It is never returned to
+      # the browser; repository access falls back to unauthenticated public API.
+      - key: GITHUB_TOKEN
+        sync: false
