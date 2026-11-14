@@ -71,6 +71,18 @@ function repositoryFailure(error: unknown, operation: "validate" | "analyse"): {
   return { message, retryAt, requestId: error.requestId };
 }
 
+function snapshotRateLimit(summary: string | null) {
+  if (!summary || !summary.toLowerCase().includes("github api rate limit reached")) {
+    return { message: summary, retryAt: null as number | null };
+  }
+  const retryMatch = summary.match(/Retry after Unix time (\d+)/i);
+  const requestMatch = summary.match(/GitHub request ID: ([\w:.-]+)/i);
+  return {
+    message: requestMatch ? `GitHub request ID: ${requestMatch[1]}.` : "GitHub is temporarily rate limiting repository analysis.",
+    retryAt: retryMatch ? Number(retryMatch[1]) : null,
+  };
+}
+
 export default function RepositoryIntelligence() {
   const { projectId } = useParams<{ projectId: string }>();
   const project = useProject(projectId);
@@ -113,12 +125,13 @@ export default function RepositoryIntelligence() {
   const languageSummary = metadata
     ? Object.entries(metadata.languages).sort((left, right) => right[1] - left[1]).slice(0, 5).map(([name]) => name).join(", ")
     : "";
+  const snapshotRateLimitInfo = snapshotRateLimit(snapshot?.error_summary ?? null);
 
   React.useEffect(() => {
-    if (!retryAt) return;
+    if (!retryAt && !snapshotRateLimitInfo.retryAt) return;
     const timer = window.setInterval(() => setRetryClock(Math.floor(Date.now() / 1000)), 1000);
     return () => window.clearInterval(timer);
-  }, [retryAt]);
+  }, [retryAt, snapshotRateLimitInfo.retryAt]);
 
   React.useEffect(() => {
     if (!projectId) return;
@@ -336,7 +349,7 @@ export default function RepositoryIntelligence() {
         <div className="flex flex-wrap gap-2"><Badge>{pretty(snapshot.status)}</Badge><Badge variant="secondary">Branch: {snapshot.branch}</Badge>{snapshot.commit_sha && <Badge variant="secondary">{snapshot.commit_sha.slice(0, 8)}</Badge>}</div>
         <p className="text-sm">Current backend stage: <strong>{pretty(snapshot.stage)}</strong></p>
         <div className="grid gap-3 sm:grid-cols-4">{[["Files", snapshot.files_processed, snapshot.files_discovered], ["Commits", snapshot.commits_processed], ["Issues", snapshot.issues_processed], ["Pull requests", snapshot.pull_requests_processed]].map(([label, count, total]) => <div key={String(label)} className="rounded-md border p-3"><p className="text-xs text-muted-foreground">{String(label)}</p><p className="mt-1 font-semibold">{String(count)}{total !== undefined ? ` / ${String(total)}` : ""}</p></div>)}</div>
-        {snapshot.error_summary && <Alert variant="destructive">{snapshot.error_summary}</Alert>}{snapshot.warnings.map((warning) => <Alert key={warning}>{warning}</Alert>)}
+        {snapshot.error_summary && <Alert variant="destructive">{snapshotRateLimitInfo.retryAt !== null ? <><p>GitHub API rate limit reached. {snapshotRateLimitInfo.retryAt <= retryClock ? "You can retry now." : `Retry available after ${new Date(snapshotRateLimitInfo.retryAt * 1000).toLocaleTimeString()} (in ${snapshotRateLimitInfo.retryAt - retryClock}s).`}</p>{snapshotRateLimitInfo.message && <p className="mt-1">{snapshotRateLimitInfo.message}</p>}<Button className="mt-2" size="sm" variant="outline" disabled={busy || snapshotRateLimitInfo.retryAt > retryClock} onClick={() => void analyse()}>Retry repository analysis</Button></> : snapshot.error_summary}</Alert>}{snapshot.warnings.map((warning) => <Alert key={warning}>{warning}</Alert>)}
       </CardContent></Card>}
       {tab === "Analysis" && <Card><CardHeader><CardTitle>Analysis run</CardTitle></CardHeader><CardContent><dl className="grid gap-3 sm:grid-cols-2">{Object.entries({ Status: snapshot.status, Stage: snapshot.stage, Branch: snapshot.branch, "Tree complete": String(snapshot.tree_complete), "Files processed": snapshot.files_processed, "Files skipped": snapshot.files_skipped }).map(([key, value]) => <div key={key}><dt className="text-xs text-muted-foreground">{key}</dt><dd className="text-sm">{String(value)}</dd></div>)}</dl></CardContent></Card>}
       {tab === "Code Intelligence" && <div className="space-y-4">

@@ -101,6 +101,26 @@ describe("Repository Intelligence", () => {
     expect(screen.getByRole("button", { name: "Retry request" })).toBeDisabled();
   });
 
+  it("formats rate limits saved by a background analysis and offers a scheduled retry", async () => {
+    const retryAt = Math.floor(Date.now() / 1000) + 600;
+    mocks.get.mockImplementation((url: string) => url === "/repositories/projects/project-1"
+      ? Promise.resolve({ data: { items: [{
+        id: "repo-id", owner: "RehanKwatla", repository_name: "Continuum", repository_url: "https://github.com/RehanKwatla/Continuum",
+        default_branch: "main", selected_branch: "main", branches: [{ name: "main", commit_sha: "abc123", is_default: true }], languages: {}, latest_snapshot: {
+          id: "snapshot-id", repository_id: "repo-id", branch: "main", commit_sha: "abc123", status: "partially_completed", stage: "partially_completed",
+          tree_complete: false, files_discovered: 322, files_processed: 51, files_skipped: 0, commits_processed: 0, issues_processed: 0,
+          pull_requests_processed: 0, warnings: [], error_summary: `GitHub API rate limit reached. Wait before retrying. Retry after Unix time ${retryAt}. GitHub request ID: ABC123:456.`,
+        },
+      }] } })
+      : Promise.resolve({ data: { items: [] } }));
+    renderPage();
+    expect(await screen.findByText(/GitHub API rate limit reached/)).toBeInTheDocument();
+    expect(screen.getByText(/Retry available after/)).toBeInTheDocument();
+    expect(screen.getByText(/GitHub request ID: ABC123:456/)).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(`Unix time ${retryAt}`))).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry repository analysis" })).toBeDisabled();
+  });
+
   it("shows code intelligence for an already saved snapshot and explains empty analysis state", async () => {
     mocks.get.mockImplementation((url: string) => {
       if (url === "/repositories/projects/project-1") return Promise.resolve({ data: { items: [{
