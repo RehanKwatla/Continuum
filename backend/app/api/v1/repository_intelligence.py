@@ -26,7 +26,7 @@ from app.models.repository_intelligence import (
 )
 from app.models.workspace import Workspace
 from app.schemas.repository_intelligence import (
-    AnalysisStartedResponse, RepositoryAnalyseRequest, RepositoryValidateRequest,
+    AnalysisStartedResponse, KnowledgeConflictReviewRequest, RepositoryAnalyseRequest, RepositoryValidateRequest,
 )
 from app.services.public_github import GitHubApiError, RepositoryUrlError
 from app.services.repository_intelligence import (
@@ -36,6 +36,8 @@ from app.services.code_analysis.parser import PARSER_VERSION
 from app.services.code_analysis.service import run_code_analysis, run_payload
 from app.services.git_history_intelligence import ANALYSIS_VERSION as HISTORY_ANALYSIS_VERSION, analyze_history, history_payload
 from app.services.repository_knowledge import ANALYSIS_VERSION as KNOWLEDGE_ANALYSIS_VERSION, run_knowledge_analysis, run_payload as knowledge_run_payload
+from app.services.evidence_quality import assess_evidence_quality
+from app.services import audit_service
 
 router = APIRouter(prefix="/repositories", tags=["repository-intelligence"])
 
@@ -245,7 +247,7 @@ def knowledge_overview(repository_id: uuid.UUID, user: CurrentUser, db: DbSessio
     run = _knowledge_run(db, repository_id, user, snapshot_id=snapshot_id)
     if not run:
         return {"status": "not_started", "units": 0, "gaps": 0, "conflicts": 0, "assumptions": 0, "coverage": {}, "message": "Run knowledge analysis on a completed repository snapshot."}
-    counts = {"units": db.scalar(select(func.count()).select_from(KnowledgeUnit).where(KnowledgeUnit.analysis_run_id == run.id)) or 0, "gaps": db.scalar(select(func.count()).select_from(KnowledgeGap).where(KnowledgeGap.analysis_run_id == run.id, KnowledgeGap.status.in_(["open", "under_review"]))) or 0, "conflicts": db.scalar(select(func.count()).select_from(KnowledgeConflict).where(KnowledgeConflict.analysis_run_id == run.id, KnowledgeConflict.status == "open")) or 0, "assumptions": db.scalar(select(func.count()).select_from(ProjectAssumption).where(ProjectAssumption.analysis_run_id == run.id, ProjectAssumption.verification_status == "unverified")) or 0}
+    counts = {"units": db.scalar(select(func.count()).select_from(KnowledgeUnit).where(KnowledgeUnit.analysis_run_id == run.id)) or 0, "gaps": db.scalar(select(func.count()).select_from(KnowledgeGap).where(KnowledgeGap.analysis_run_id == run.id, KnowledgeGap.status.in_(["open", "under_review"]))) or 0, "conflicts": db.scalar(select(func.count()).select_from(KnowledgeConflict).where(KnowledgeConflict.analysis_run_id == run.id, KnowledgeConflict.status.in_(["open", "under_review"]))) or 0, "assumptions": db.scalar(select(func.count()).select_from(ProjectAssumption).where(ProjectAssumption.analysis_run_id == run.id, ProjectAssumption.verification_status == "unverified")) or 0}
     return {"status": run.status, "analysis": knowledge_run_payload(run), **counts, "coverage": run.coverage}
 
 
@@ -263,10 +265,35 @@ def knowledge_units(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, 
         query = query.where(KnowledgeUnit.freshness_status == freshness)
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = db.scalars(query.order_by(KnowledgeUnit.category, KnowledgeUnit.title).offset((page - 1) * page_size).limit(page_size)).all()
+    source_snapshot = db.get(RepositorySnapshot, run.snapshot_id)
+    latest_snapshot = db.scalar(select(RepositorySnapshot).where(RepositorySnapshot.repository_connection_id == repository_id, RepositorySnapshot.branch == source_snapshot.branch, RepositorySnapshot.ingestion_status.in_([RepositoryIngestionStatus.COMPLETED, RepositoryIngestionStatus.PARTIALLY_COMPLETED])).order_by(RepositorySnapshot.created_at.desc()).limit(1)) if source_snapshot else None
+    latest_files = {f.path: f.blob_sha for f in db.scalars(select(RepositoryFile).where(RepositoryFile.snapshot_id == latest_snapshot.id)).all()} if latest_snapshot and latest_snapshot.id != run.snapshot_id else {}
+    source_files = {f.path: f.blob_sha for f in db.scalars(select(RepositoryFile).where(RepositoryFile.snapshot_id == run.snapshot_id)).all()} if latest_files else {}
+    all_conflicts = db.scalars(select(KnowledgeConflict).where(KnowledgeConflict.analysis_run_id == run.id)).all()
     items = []
     for row in rows:
         evidence = db.scalars(select(KnowledgeEvidence).where(KnowledgeEvidence.knowledge_unit_id == row.id).order_by(KnowledgeEvidence.created_at)).all()
-        items.append({"id": row.id, "category": row.category, "title": row.title, "content": row.content, "evidence_level": row.evidence_level, "confidence": row.confidence, "extraction_method": row.extraction_method, "freshness_status": row.freshness_status, "source_timestamp": row.source_timestamp, "evidence": [{"source_id": e.source_id, "source_type": e.source_type, "source_name": e.source_name, "file_path": e.file_path, "line_start": e.line_start, "line_end": e.line_end, "source_location": e.source_location, "source_url": e.source_url, "quote": e.quote, "source_timestamp": e.source_timestamp} for e in evidence]})
+        evidence_payload = []
+        for e in evidence:
+            validity = "not_rechecked"
+            if source_snapshot and latest_snapshot and latest_snapshot.id == run.snapshot_id and e.file_path:
+                validity = "current_snapshot"
+            elif latest_files and e.file_path:
+                if e.file_path not in latest_files:
+                    validity = "removed"
+                else:
+                    old_sha = source_files.get(e.file_path)
+                    if old_sha and latest_files[e.file_path]:
+                        validity = "unchanged_in_newer_snapshot" if old_sha == latest_files[e.file_path] else "changed"
+            evidence_payload.append({"source_id": str(e.source_id), "source_type": e.source_type, "source_name": e.source_name, "file_path": e.file_path, "line_start": e.line_start, "line_end": e.line_end, "source_location": e.source_location, "source_url": e.source_url, "quote": e.quote, "source_timestamp": e.source_timestamp.isoformat() if e.source_timestamp else None, "current_validity": validity})
+        source_ids = {str(e.source_id) for e in evidence}
+        contradictory = []
+        for conflict in all_conflicts:
+            left_id, right_id = str((conflict.evidence_a or {}).get("source_id", "")), str((conflict.evidence_b or {}).get("source_id", ""))
+            if source_ids.intersection({left_id, right_id}):
+                contradictory.append({"conflict_id": str(conflict.id), "status": conflict.status, "claim_a": conflict.claim_a, "claim_b": conflict.claim_b, "evidence_a": conflict.evidence_a, "evidence_b": conflict.evidence_b})
+        quality = assess_evidence_quality(statement=row.content, evidence_level=row.evidence_level, evidence=evidence_payload, contradicting_evidence=contradictory, freshness_status=row.freshness_status)
+        items.append({"id": row.id, "category": row.category, "title": row.title, "content": row.content, "evidence_level": row.evidence_level, "confidence": row.confidence, "confidence_basis": "legacy extractor heuristic; not calibrated and not a probability", "extraction_method": row.extraction_method, "freshness_status": row.freshness_status, "source_timestamp": row.source_timestamp, "evidence_quality": quality, "evidence": evidence_payload})
     return {"items": items, "page": page, "page_size": page_size, "total": total, "analysis_id": run.id}
 
 
@@ -280,7 +307,7 @@ def knowledge_graph(repository_id: uuid.UUID, user: CurrentUser, db: DbSession, 
     nodes = db.scalars(query.offset((page - 1) * page_size).limit(page_size)).all()
     ids = [node.id for node in nodes]
     edges = db.scalars(select(KnowledgeRelationship).where(KnowledgeRelationship.analysis_run_id == run.id, KnowledgeRelationship.source_entity_id.in_(ids), KnowledgeRelationship.target_entity_id.in_(ids)).limit(page_size * 3)).all() if ids else []
-    return {"nodes": [{"id": n.id, "type": n.entity_type, "label": n.entity_name, "reference": n.canonical_reference, "metadata": n.metadata_json} for n in nodes], "edges": [{"source": e.source_entity_id, "target": e.target_entity_id, "type": e.relationship_type, "confidence": e.confidence, "evidence_level": e.evidence_level, "evidence_id": e.evidence_id} for e in edges], "page": page, "page_size": page_size, "total": total, "analysis_id": run.id}
+    return {"nodes": [{"id": n.id, "type": n.entity_type, "label": n.entity_name, "reference": n.canonical_reference, "metadata": n.metadata_json} for n in nodes], "edges": [{"source": e.source_entity_id, "target": e.target_entity_id, "type": e.relationship_type, "confidence": e.confidence, "confidence_basis": "legacy relation heuristic; not calibrated", "evidence_level": e.evidence_level, "evidence_id": e.evidence_id} for e in edges], "page": page, "page_size": page_size, "total": total, "analysis_id": run.id}
 
 
 @router.get("/{repository_id}/knowledge/decisions")
@@ -290,7 +317,7 @@ def knowledge_decisions(repository_id: uuid.UUID, user: CurrentUser, db: DbSessi
         return {"items": [], "page": page, "page_size": page_size, "total": 0}
     query = select(KnowledgeUnit).where(KnowledgeUnit.analysis_run_id == run.id, KnowledgeUnit.category == "technical_decision_context")
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    return {"items": [{"id": u.id, "title": u.title, "summary": u.content, "status": "unclear", "evidence_level": u.evidence_level, "confidence": u.confidence} for u in db.scalars(query.offset((page - 1) * page_size).limit(page_size)).all()], "page": page, "page_size": page_size, "total": total, "note": "Stage 4 classifies commits but does not persist technical decision records; these are evidence excerpts, not accepted decisions."}
+    return {"items": [{"id": u.id, "title": u.title, "summary": u.content, "status": "unclear", "evidence_level": u.evidence_level, "confidence": u.confidence, "confidence_basis": "legacy extractor heuristic; not calibrated and not a probability"} for u in db.scalars(query.offset((page - 1) * page_size).limit(page_size)).all()], "page": page, "page_size": page_size, "total": total, "note": "Stage 4 classifies commits but does not persist technical decision records; these are evidence excerpts, not accepted decisions."}
 
 
 @router.get("/{repository_id}/knowledge/gaps")
@@ -314,7 +341,31 @@ def knowledge_conflicts(repository_id: uuid.UUID, user: CurrentUser, db: DbSessi
     query = select(KnowledgeConflict).where(KnowledgeConflict.analysis_run_id == run.id)
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = db.scalars(query.order_by(KnowledgeConflict.created_at.desc()).offset((page - 1) * page_size).limit(page_size)).all()
-    return {"items": [{"id": c.id, "conflict_type": c.conflict_type, "claim_a": c.claim_a, "claim_b": c.claim_b, "evidence_a": c.evidence_a, "evidence_b": c.evidence_b, "confidence": c.confidence, "status": c.status, "possible_explanation": c.possible_explanation} for c in rows], "page": page, "page_size": page_size, "total": total}
+    return {"items": [{"id": c.id, "conflict_type": c.conflict_type, "claim_a": c.claim_a, "claim_b": c.claim_b, "evidence_a": c.evidence_a, "evidence_b": c.evidence_b, "confidence": c.confidence, "confidence_basis": "detector heuristic; not calibrated", "status": c.status, "possible_explanation": c.possible_explanation, "resolution_note": c.resolution_note, "reviewed_by_id": str(c.reviewed_by_id) if c.reviewed_by_id else None, "reviewed_at": c.reviewed_at, "requires_reverification": c.requires_reverification} for c in rows], "page": page, "page_size": page_size, "total": total}
+
+
+@router.patch("/{repository_id}/knowledge/conflicts/{conflict_id}")
+def review_knowledge_conflict(repository_id: uuid.UUID, conflict_id: uuid.UUID, payload: KnowledgeConflictReviewRequest, user: CurrentUser, db: DbSession):
+    connection = _connection(db, repository_id, user)
+    resolve_project_access(db, project_id=connection.project_id, user=user, required_role=WorkspaceRole.ADMIN)
+    conflict = db.get(KnowledgeConflict, conflict_id)
+    if not conflict or conflict.repository_id != repository_id:
+        raise NotFoundError("Repository knowledge conflict not found.")
+    allowed = {"open", "under_review", "resolved", "partially_resolved", "superseded"}
+    new_status = payload.status
+    note = payload.resolution_note.strip()
+    if new_status not in allowed:
+        raise ValidationAppError("Status must be open, under_review, resolved, partially_resolved, or superseded.")
+    if new_status in {"resolved", "partially_resolved", "superseded"} and not note:
+        raise ValidationAppError("A human resolution note is required to close or supersede a conflict.")
+    conflict.status = new_status
+    conflict.resolution_note = note or None
+    conflict.reviewed_by_id = user.id if note else None
+    conflict.reviewed_at = datetime.now(timezone.utc) if note else None
+    conflict.requires_reverification = True
+    audit_service.record(db, action="repository_knowledge_conflict_reviewed", user_id=user.id, workspace_id=connection.project.workspace_id, resource_type="repository_knowledge_conflict", resource_id=conflict.id, metadata={"project_id": str(connection.project_id), "repository_id": str(repository_id), "status": new_status, "resolution_note": note or None, "requires_reverification": conflict.requires_reverification})
+    db.commit()
+    return {"id": str(conflict.id), "status": conflict.status, "resolution_note": conflict.resolution_note, "reviewed_by_id": str(conflict.reviewed_by_id) if conflict.reviewed_by_id else None, "reviewed_at": conflict.reviewed_at, "requires_reverification": conflict.requires_reverification}
 
 
 @router.get("/{repository_id}/knowledge/assumptions")
@@ -342,7 +393,7 @@ def knowledge_completeness(repository_id: uuid.UUID, user: CurrentUser, db: DbSe
         matches = sorted(path for path in paths if any(indicator in path for indicator in indicators))
         status_text = "well_documented" if len(matches) > 1 else "partially_documented" if matches else "not_found"
         items.append({"dimension": category, "status": status_text, "evidence_found": matches[:30], "sources_inspected": len(rows), "confidence": 0.62 if rows else 0.0, "recommended_improvement": recommendation, "limitation": "File presence is a discoverability signal, not proof that content is complete or current."})
-    return {"snapshot_id": snapshot.id, "items": items, "aggregate_score": None, "note": "No aggregate score is shown; absence in this snapshot is not proof the knowledge does not exist."}
+    return {"snapshot_id": snapshot.id, "items": [{**item, "confidence_basis": "legacy file-presence heuristic; not calibrated and not a probability"} for item in items], "aggregate_score": None, "note": "No aggregate score is shown; absence in this snapshot is not proof the knowledge does not exist."}
 
 
 @router.get("/{repository_id}/knowledge/profile")
@@ -359,7 +410,7 @@ def successor_knowledge_profile(repository_id: uuid.UUID, user: CurrentUser, db:
         for unit in units[:25]:
             ev = db.scalars(select(KnowledgeEvidence).where(KnowledgeEvidence.knowledge_unit_id == unit.id).limit(5)).all()
             section_evidence.extend({"unit_id": str(unit.id), "title": unit.title, "evidence_level": unit.evidence_level, "source": e.source_location or e.source_name, "source_url": e.source_url, "quote": e.quote[:500]} for e in ev)
-        sections.append({"section": name, "items": [{"id": str(u.id), "category": u.category, "title": u.title, "content": u.content, "evidence_level": u.evidence_level, "confidence": u.confidence} for u in units[:25]], "evidence": section_evidence, "status": "evidence_found" if units else "unknown"})
+        sections.append({"section": name, "items": [{"id": str(u.id), "category": u.category, "title": u.title, "content": u.content, "evidence_level": u.evidence_level, "confidence": u.confidence, "confidence_basis": "legacy extractor heuristic; not calibrated and not a probability"} for u in units[:25]], "evidence": section_evidence, "status": "evidence_found" if units else "unknown"})
     gaps = db.scalars(select(KnowledgeGap).where(KnowledgeGap.analysis_run_id == run.id, KnowledgeGap.status.in_(["open", "under_review"])).limit(50)).all()
     sections.append({"section": "critical_unknowns", "items": [{"id": str(g.id), "title": g.title, "question": g.recommended_question, "confidence": g.confidence, "evidence": g.evidence_references} for g in gaps], "status": "evidence_found" if gaps else "not_identified"})
     return {"status": "ready", "analysis_id": run.id, "sections": sections, "generated_from": run.coverage}
@@ -385,8 +436,8 @@ def search_repository_knowledge(repository_id: uuid.UUID, payload: dict, user: C
     result_items = []
     for score, unit in ranked[:10]:
         evidence = db.scalars(select(KnowledgeEvidence).where(KnowledgeEvidence.knowledge_unit_id == unit.id).limit(5)).all()
-        result_items.append({"id": unit.id, "title": unit.title, "content": unit.content, "category": unit.category, "evidence_level": unit.evidence_level, "confidence": unit.confidence, "relevance_score": score, "freshness": unit.freshness_status, "evidence": [{"source": e.source_name, "location": e.source_location, "source_url": e.source_url, "quote": e.quote, "source_timestamp": e.source_timestamp} for e in evidence]})
-    conflicts = db.scalars(select(KnowledgeConflict).where(KnowledgeConflict.analysis_run_id == run.id, KnowledgeConflict.status == "open").limit(20)).all()
+        result_items.append({"id": unit.id, "title": unit.title, "content": unit.content, "category": unit.category, "evidence_level": unit.evidence_level, "confidence": unit.confidence, "confidence_basis": "legacy extractor heuristic; not calibrated and not a probability", "relevance_score": score, "freshness": unit.freshness_status, "evidence": [{"source": e.source_name, "location": e.source_location, "source_url": e.source_url, "quote": e.quote, "source_timestamp": e.source_timestamp} for e in evidence]})
+    conflicts = db.scalars(select(KnowledgeConflict).where(KnowledgeConflict.analysis_run_id == run.id, KnowledgeConflict.status.in_(["open", "under_review"])).limit(20)).all()
     relevant_conflicts = [{"id": c.id, "claim_a": c.claim_a, "claim_b": c.claim_b, "evidence_a": c.evidence_a, "evidence_b": c.evidence_b} for c in conflicts if any(term in f"{c.claim_a} {c.claim_b}".lower() for term in terms)]
     answer = "Evidence excerpts matched the query; inspect each citation before treating them as a verified answer." if result_items else "Unknown: the indexed evidence does not answer this query."
     return {"answer": answer, "items": result_items, "conflicts": relevant_conflicts, "observed_vs_inferred": "Each result is labeled with its evidence level.", "missing_information": not bool(result_items), "source_freshness": "Freshness is unverified for this snapshot run.", "method": "ranked keyword fallback; no embeddings are configured"}

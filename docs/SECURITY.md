@@ -130,6 +130,22 @@ The approval/publish service methods re-check the role independently
 `PUBLISHER_ROLES`), so a caller cannot reach them merely by holding an ADMIN
 route.
 
+Repository snapshot reads first resolve the repository connection and then
+check viewer access on its associated project (`repository_intelligence.py`,
+`_connection`). The repository knowledge conflict PATCH route repeats this
+boundary and requires `ADMIN` access, which includes workspace owners under the
+standard role hierarchy. It does not accept a client-supplied project/workspace
+identity. Review status and note are audited with the actual project and
+workspace IDs. Public Demo does not bypass the project permission check. The
+route preserves both conflicting claims and requires a human note before
+resolved, partially resolved or superseded status can be recorded.
+
+The qualitative evidence assessor only operates over rows already scoped to
+the authorized analysis run. Snapshot freshness is a comparison of captured
+file blob SHAs, not a live GitHub check. Evidence excerpt text and paths remain
+untrusted repository content and are displayed as text; this change does not
+execute files or package scripts.
+
 ---
 
 ## 4. Integration Security (GitHub OAuth)

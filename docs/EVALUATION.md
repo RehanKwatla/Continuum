@@ -1,5 +1,76 @@
 # CONTINUUM — Evaluation Framework
 
+## Section 09 — Advanced knowledge, risk and successor evaluation
+
+This section is the execution report for the advanced evidence-quality work in
+this change. It supplements the persisted Phase 5 pipeline evaluation below;
+it does not claim that the full live repository pipeline or a production GitHub
+integration has been evaluated.
+
+### Objectives and test environment
+
+The new deterministic classifier is tested against an isolated, synthetic
+scenario catalog in `backend/app/evaluation/evidence_scenarios.py`. The catalog
+is test data only and is never inserted into user repositories. It exercises
+complete evidence, indirect/inferred evidence, insufficient and inaccessible
+evidence, recorded contradictions, changed and removed files, missing
+locators, unchecked older snapshots, and historical activity that cannot prove
+current behavior. Assertions verify expected qualitative labels, all six
+dimension explanations, absence of an aggregate score, and an explicit
+unverified state.
+
+Ground truth was declared in the scenario table before executing the pure
+classifier tests. “Supported” means only that the rule's observed/direct,
+located and snapshot-checked conditions hold. It is not a human verification
+and does not imply the evidence is complete. The tests do not measure classifier
+precision/recall over a production corpus.
+
+### Results actually executed
+
+| Check | Result | Scope |
+| --- | --- | --- |
+| `python -m pytest --noconftest -q tests/test_evidence_quality.py tests/test_handover_intelligence.py` | **7 passed** | Pure qualitative classifier, ten synthetic cases, and role-ordering independent of legacy confidence; no database or network |
+| `npm run build` | **passed** | TypeScript check and Vite production build |
+| `python -m alembic heads` | **passed** | `d7f8091a2b3c` is the single current migration head |
+| `python -m alembic upgrade head --sql` | **passed** | Offline PostgreSQL SQL generation includes all four review columns and FK |
+| Frontend Vitest suite | **55 passed** | 11 test files, including evidence quality display and admin conflict review |
+| PostgreSQL-backed repository knowledge tests | **blocked during setup** | All 5 cases errored before test execution because the test PostgreSQL endpoint `localhost:5433` was unreachable in this environment |
+
+Not yet evaluated end to end: the full dataset matrix from the master brief,
+live GitHub rate limits/timeouts, runtime authorization behavior for this new
+PATCH route (an integration test is present but could not run without
+PostgreSQL), all-role handovers against a real indexed repository, and the full
+Connect → Reconstruct → Verify → Review → Handover flow. Those are not reported
+as passing. Existing Stage 5 metrics remain grounded in the single Payments
+Service synthetic pipeline dataset described below; the ten classifier cases
+are not additional full-pipeline measurements.
+
+### Findings and limitations
+
+- Evidence recency is based on the selected captured snapshot and a later
+  completed same-branch snapshot's Git blob SHA. No live GitHub fetch is done by
+  the knowledge read endpoint, so the newest captured snapshot can itself be
+  out of date.
+- A conflict is associated with a knowledge unit only when the conflict's
+  evidence source IDs match the unit's evidence IDs. Broader semantic conflict
+  discovery is not implied.
+- Extractor/conflict numeric fields remain for backward compatibility and are
+  labelled as uncalibrated heuristics. The interface no longer presents them
+  as percentages or probabilities.
+- Resolved conflicts remain visible and request re-verification; the workflow
+  does not automatically delete claims or declare either side true.
+- The controlled scenario suite tests the qualitative rule service, not GitHub
+  ingestion, dependency risk classification, role relevance, readiness, or
+  production authorization. DB-backed test execution is required before those
+  claims can be made.
+
+### Remediation before production release
+
+Apply the new Alembic migration, run the PostgreSQL-backed conflict and
+cross-workspace permission tests, run the complete backend suite, then run the existing synthetic pipeline evaluation and a controlled
+public-repository workflow. Record those results separately from this pure
+classifier report.
+
 This document describes the evaluation subsystem of CONTINUUM: the synthetic
 ground-truth dataset, the reproducible metrics (A–I), how an evaluation run is
 executed and persisted, how runs are compared for regressions, and the

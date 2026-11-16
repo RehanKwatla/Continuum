@@ -140,6 +140,10 @@ class KnowledgeConflict(Base):
     confidence: Mapped[float] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="open", server_default="open", index=True)
     possible_explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    requires_reverification: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
     dedup_key: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[CreatedAt]
 

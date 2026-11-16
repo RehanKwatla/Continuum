@@ -22,6 +22,14 @@ def test_custom_role_prioritizes_its_explicit_focus_terms():
     assert [item["id"] for item in prioritize_knowledge(rows, "database engineer")] == ["database", "frontend"]
 
 
+def test_knowledge_order_does_not_treat_legacy_confidence_as_calibrated():
+    rows = [
+        {"id": "inferred", "title": "API design", "category": "backend", "evidence_level": "inferred", "confidence": 0.99},
+        {"id": "observed", "title": "API route", "category": "backend", "evidence_level": "observed", "confidence": 0.2},
+    ]
+    assert [item["id"] for item in prioritize_knowledge(rows, "backend_developer")] == ["observed", "inferred"]
+
+
 def test_human_fact_edits_remove_old_evidence_and_keep_original_text():
     source = {
         "sections": [{"key": "architecture", "title": "Architecture", "items": [

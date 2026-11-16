@@ -47,6 +47,11 @@ class RepositoryAnalyseRequest(BaseModel):
     branch: str | None = Field(default=None, max_length=200)
 
 
+class KnowledgeConflictReviewRequest(BaseModel):
+    status: str = Field(pattern=r"^(open|under_review|resolved|partially_resolved|superseded)$")
+    resolution_note: str = Field(default="", max_length=5000)
+
+
 class RepositoryConnectionResponse(BaseModel):
     id: UUID
     project_id: UUID

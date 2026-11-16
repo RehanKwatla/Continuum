@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), useProject: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), useProject: vi.fn() }));
 vi.mock("@/services/api", () => ({
-  api: { get: mocks.get, post: mocks.post },
+  api: { get: mocks.get, post: mocks.post, patch: mocks.patch },
   ApiClientError: class ApiClientError extends Error {
     code: string; status: number | null; details: Record<string, unknown>; requestId: string | null; retryAfterSeconds: number | null;
     constructor(message: string, options: { code?: string; status?: number | null; details?: Record<string, unknown>; requestId?: string | null; retryAfterSeconds?: number | null } = {}) {
@@ -43,6 +43,7 @@ describe("Repository Intelligence", () => {
   beforeEach(() => {
     mocks.get.mockReset().mockResolvedValue({ data: { items: [] } });
     mocks.post.mockReset();
+    mocks.patch.mockReset().mockResolvedValue({ data: {} });
     mocks.useProject.mockReturnValue({ data: { id: "project-1", name: "Billing project" } });
   });
 
@@ -179,5 +180,37 @@ describe("Repository Intelligence", () => {
     expect(await screen.findByText("Project knowledge")).toBeInTheDocument();
     expect(await screen.findByText(/Run knowledge analysis to index captured documentation/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Analyse project knowledge" })).toBeEnabled();
+  });
+
+  it("shows explained evidence quality and lets an admin annotate a conflict", async () => {
+    mocks.useProject.mockReturnValue({ data: { id: "project-1", name: "Billing project", workspace: { role: "admin" } } });
+    mocks.get.mockImplementation((url: string) => {
+      if (url === "/repositories/projects/project-1") return Promise.resolve({ data: { items: [{
+        id: "repo-id", owner: "fastapi", repository_name: "fastapi", repository_url: "https://github.com/fastapi/fastapi",
+        default_branch: "master", selected_branch: "master", branches: [], languages: {}, latest_snapshot: {
+          id: "snapshot-id", repository_id: "repo-id", branch: "master", commit_sha: "abc12345", status: "completed", stage: "completed",
+          tree_complete: true, files_discovered: 8, files_processed: 8, files_skipped: 0, commits_processed: 3, issues_processed: 0,
+          pull_requests_processed: 1, warnings: [], error_summary: null,
+        },
+      }] } });
+      if (url === "/repositories/repo-id/knowledge/overview") return Promise.resolve({ data: { status: "completed", units: 1, gaps: 0, conflicts: 1, assumptions: 0, coverage: {} } });
+      if (url === "/repositories/repo-id/knowledge/units") return Promise.resolve({ data: { items: [{
+        id: "unit-1", title: "Database setting", content: "DATABASE_URL=postgresql://local", category: "technical_decision_context", evidence_level: "observed",
+        confidence_basis: "legacy heuristic; not calibrated", evidence_quality: { status: "contested", classification: "observed", verification_status: "unverified", dimensions: { consistency: { status: "contested", reason: "A recorded conflict links to this source." } }, contradicting_evidence: [] },
+        evidence: [{ source_id: "source-1", source_name: "settings.py", source_location: "settings.py:2", quote: "DATABASE_URL=postgresql://local", current_validity: "current_snapshot" }],
+      }] } });
+      if (url === "/repositories/repo-id/knowledge/conflicts") return Promise.resolve({ data: { items: [{
+        id: "conflict-1", claim_a: "PostgreSQL", claim_b: "SQLite", conflict_type: "configuration_mismatch", status: "open", possible_explanation: "Environment differences.", confidence_basis: "detector heuristic; not calibrated", evidence_a: { source: "README.md" }, evidence_b: { source: "settings.py" }, requires_reverification: true,
+      }] } });
+      return Promise.resolve({ data: { items: [] } });
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Knowledge" }));
+    expect(await screen.findByText("Database setting")).toBeInTheDocument();
+    expect(await screen.findByText(/A recorded conflict links to this source/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Review status for PostgreSQL"), { target: { value: "under_review" } });
+    fireEvent.change(screen.getByLabelText("Human review note for PostgreSQL"), { target: { value: "Checking both files." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save review" }));
+    await waitFor(() => expect(mocks.patch).toHaveBeenCalledWith("/repositories/repo-id/knowledge/conflicts/conflict-1", { status: "under_review", resolution_note: "Checking both files." }));
   });
 });

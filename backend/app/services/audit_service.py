@@ -50,6 +50,7 @@ PHASE4_ACTIONS: frozenset[str] = frozenset(
         "successor_handover_submitted",
         "successor_handover_approved",
         "successor_verification_recorded",
+        "repository_knowledge_conflict_reviewed",
     }
 )
 

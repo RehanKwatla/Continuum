@@ -398,6 +398,41 @@ Both are exposed in [`api/v1/readiness.py`](../backend/app/api/v1/readiness.py)
 (`knowledge-dependencies`, `knowledge-gaps`, `scorecard`, `successor-workspace`,
 `successor-exercise`).
 
+### 8.4 Repository evidence quality and conflict review
+
+Repository-snapshot knowledge is persisted separately in
+[`models/repository_knowledge.py`](../backend/app/models/repository_knowledge.py).
+Each `KnowledgeUnit` is linked to `KnowledgeEvidence` records containing the
+source id, source type, file path/line locator, excerpt, URL and source timestamp.
+The API assesses six qualitative dimensions in
+[`services/evidence_quality.py`](../backend/app/services/evidence_quality.py):
+source reliability, directness, recency, corroboration, consistency and
+completeness. The dimensions include rule explanations; there is no aggregate
+probability. Extractor confidence remains available for compatibility but is
+labelled as an uncalibrated legacy heuristic. Neither a supported evidence label
+nor a detector result means a human verified the claim.
+
+For file-backed evidence, the repository knowledge API compares the selected
+snapshot with the newest completed snapshot of the same branch using captured
+Git blob SHAs. It labels the source changed, removed, unchanged in a later
+snapshot, or not rechecked. This is snapshot-relative: it does not poll GitHub
+for a live update. Unresolved `KnowledgeConflict` rows preserve both claims and
+sources. Owners/admins can set open, under-review, resolved, partially-resolved
+or superseded status; closure requires a human note, retains both sides, sets a
+re-verification flag, and writes to the audit trail. The schema extension is
+migration `d7f8091a2b3c_repository_knowledge_review.py`.
+
+### 8.5 Successor roles and readiness
+
+The existing Stage 6 handover intelligence provides backend, frontend,
+full-stack, AI/ML, DevOps, project maintainer and custom-focus profiles in
+[`services/handover_intelligence.py`](../backend/app/services/handover_intelligence.py).
+Role filtering changes ordering/focus, not the underlying evidence set.
+Readiness remains in the existing deterministic service and explicitly reports
+unknown/unassessed dimensions; its weights and limitations are documented in
+[`docs/READINESS.md`](READINESS.md). Do not interpret a role-specific package
+as proof a successor completed its tasks.
+
 ---
 
 ## 9. Continuity scorecard and evaluation subsystem

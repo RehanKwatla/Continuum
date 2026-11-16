@@ -38,11 +38,12 @@ ROLE_FOCUS: dict[str, tuple[str, ...]] = {
 def prioritize_knowledge(items: list[dict[str, Any]], role: str) -> list[dict[str, Any]]:
     """Stable, explainable role ordering; it changes ordering, never facts."""
     focus = ROLE_FOCUS.get(role, tuple(re.findall(r"[a-z0-9]+", role.lower())))
+    evidence_rank = {"observed": 0, "inferred": 1, "unknown": 2}
     return sorted(
         items,
         key=lambda item: (
             not any(token in f"{item.get('category', '')} {item.get('title', '')} {item.get('content', '')}".lower() for token in focus),
-            -float(item.get("confidence", 0)),
+            evidence_rank.get(str(item.get("evidence_level", "unknown")).lower(), 2),
             str(item.get("title", "")),
         ),
     )
@@ -106,7 +107,7 @@ def build_successor_handover(db: Session, project_id: uuid.UUID, role: str = "pr
 
     section_items = [
         {"key": "project_overview", "title": "Project overview", "items": [{"text": connection.description or f"Repository {connection.owner}/{connection.repository_name}", "evidence_level": "observed", "evidence": [ref("snapshot", snapshot.id, f"Snapshot {snapshot.commit_sha or snapshot.branch}")]}]},
-        {"key": "architecture", "title": "System architecture", "items": [{"text": f"{c.component_name}: {c.category}", "evidence_level": "inferred", "evidence": [ref("code_analysis", code_run.id, f"Code analysis ({c.confidence} confidence)")] + [ref("file", p, p) for p in (c.file_paths or [])[:10]]} for c in components]},
+        {"key": "architecture", "title": "System architecture", "items": [{"text": f"{c.component_name}: {c.category}", "evidence_level": "inferred", "evidence": [ref("code_analysis", code_run.id, "Static analysis grouped captured files; this is an inference, not a verified architecture claim.")] + [ref("file", p, p) for p in (c.file_paths or [])[:10]]} for c in components]},
         {"key": "development_setup", "title": "Development setup", "items": [{"text": f"Detected dependency: {d.package_name} {d.declared_version or ''} ({d.ecosystem}) from {d.manifest_path}", "evidence_level": "observed", "evidence": [ref("file", d.manifest_path, d.manifest_path)]} for d in dependencies]},
         {"key": "technical_decisions", "title": "Technical decisions and history", "items": [{"text": c.summary, "evidence_level": "inferred", "evidence": [ref("commit", c.commit_sha, c.commit_sha[:12])]} for c in commits]},
         {"key": "critical_knowledge", "title": "Critical knowledge", "items": knowledge},

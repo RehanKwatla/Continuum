@@ -419,6 +419,38 @@ Response:
 
 **Errors:** revoked/invalid token → 401; inaccessible repository → 404; rate limit → 429 `rate_limited`; other GitHub faults → 502 `upstream_error`; unconfigured → 503 `not_configured`.
 
+### Snapshot repository intelligence
+
+Repository snapshot routes live under `/api/v1/repositories/{repository_id}`.
+They require an authenticated user with at least `viewer` access to the owning
+project; the server derives that project from the repository connection.
+
+| Method | Path | Minimum role | Purpose |
+| --- | --- | --- | --- |
+| GET | `/repositories/{id}/knowledge/units` | viewer | Snapshot knowledge units, linked evidence and qualitative evidence assessment |
+| GET | `/repositories/{id}/knowledge/conflicts` | viewer | Conflicting claims, both evidence sides, lifecycle status and review note |
+| PATCH | `/repositories/{id}/knowledge/conflicts/{conflict_id}` | admin/owner | Set lifecycle status and human review note |
+
+Conflict update body:
+
+```json
+{ "status": "under_review", "resolution_note": "Checking the current branch configuration." }
+```
+
+Statuses are `open`, `under_review`, `resolved`, `partially_resolved` and
+`superseded`. Closing/superseding a conflict requires a note. The action is
+audited, and a closed conflict is marked as requiring re-verification; neither
+claim or its evidence is deleted. Unit payloads keep the legacy numeric
+`confidence` for backward compatibility and include `confidence_basis` stating
+that it is an uncalibrated extractor heuristic. New consumers should use the
+explainable `evidence_quality` dimensions, not treat that legacy value as a
+probability. Freshness compares captured snapshots of the same branch only; it
+does not verify that GitHub has not changed since the latest ingestion.
+
+Migration: `d7f8091a2b3c_repository_knowledge_review.py` adds nullable human
+review fields and a re-verification flag. No new environment variables are
+required.
+
 ---
 
 ## 9. Endpoint index
@@ -450,6 +482,9 @@ Response:
 | GET | `/api/v1/github/repositories` | auth | List authorised repos |
 | GET | `/api/v1/github/repository` | auth | Repo detail |
 | POST | `/api/v1/projects/{project_id}/github/import` | member | Import repo artefacts |
+| GET | `/api/v1/repositories/{repository_id}/knowledge/units` | viewer | Evidence-linked repository knowledge |
+| GET | `/api/v1/repositories/{repository_id}/knowledge/conflicts` | viewer | Repository knowledge conflicts |
+| PATCH | `/api/v1/repositories/{repository_id}/knowledge/conflicts/{conflict_id}` | admin | Review and annotate a repository conflict |
 | POST | `/api/v1/projects/{project_id}/memory/reconstruct` | member | Run the reconstruction workflow |
 | GET | `/api/v1/projects/{project_id}/memory` | viewer | Reconstructed project memory |
 | GET | `/api/v1/projects/{project_id}/processing-runs` | viewer | Ingestion/AI run history |
