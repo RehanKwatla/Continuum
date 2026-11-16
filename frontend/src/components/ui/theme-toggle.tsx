@@ -40,25 +40,26 @@ export function ThemeToggle({
           onClick={toggleTheme}
           className={cn(
             "relative inline-flex shrink-0 cursor-pointer rounded-full border border-border bg-secondary/80 p-0.5 transition-colors duration-200 ease-in-out hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background active:scale-95",
-            isSmall ? "h-6 w-11" : "h-7 w-14",
+            isSmall ? "h-6 w-[47px]" : "h-7 w-[59px]",
           )}
         >
           {/* Background icons in the track */}
           <span className="absolute inset-0 flex items-center justify-between px-1.5 pointer-events-none select-none">
-            <Sun
-              className={cn(
-                "transition-opacity duration-200",
-                isSmall ? "h-3 w-3" : "h-3.5 w-3.5",
-                isDark ? "opacity-30 text-muted-foreground" : "opacity-100 text-amber-500",
-              )}
-            />
-            <Moon
-              className={cn(
-                "transition-opacity duration-200",
-                isSmall ? "h-3 w-3" : "h-3.5 w-3.5",
-                isDark ? "opacity-100 text-orchid" : "opacity-30 text-muted-foreground",
-              )}
-            />
+            {isDark ? (
+              <Sun
+                className={cn(
+                  "transition-opacity duration-200 text-muted-foreground opacity-30",
+                  isSmall ? "h-3 w-3" : "h-3.5 w-3.5",
+                )}
+              />
+            ) : (
+              <Moon
+                className={cn(
+                  "ml-auto transition-opacity duration-200 text-muted-foreground opacity-30",
+                  isSmall ? "h-3 w-3" : "h-3.5 w-3.5",
+                )}
+              />
+            )}
           </span>
 
           {/* Sliding knob (thumb) */}
@@ -68,8 +69,8 @@ export function ThemeToggle({
               isSmall ? "h-4.5 w-4.5" : "h-5.5 w-5.5",
               isDark
                 ? isSmall
-                  ? "translate-x-5 text-orchid"
-                  : "translate-x-7 text-orchid"
+                  ? "translate-x-[23px] text-orchid"
+                  : "translate-x-[31px] text-orchid"
                 : "translate-x-0 text-amber-500",
             )}
           >
