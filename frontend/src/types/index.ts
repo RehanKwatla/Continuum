@@ -395,6 +395,21 @@ export interface DashboardStats {
   upcoming: string[];
 }
 
+export interface RepositoryActivityCommit {
+  sha: string;
+  committed_at: string;
+  message: string;
+}
+
+export interface RepositoryActivity {
+  repository_url: string;
+  branch: string;
+  sampled_commits: number;
+  sample_limit: number;
+  note: string;
+  commits: RepositoryActivityCommit[];
+}
+
 // ---------------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------------

@@ -121,6 +121,8 @@ def _retry_after_seconds(value: str | None) -> int | None:
 def _response_ttl(path: str) -> float:
     if re.fullmatch(r"/repos/[^/]+/[^/]+", path):
         return 300
+    if re.fullmatch(r"/repos/[^/]+/[^/]+/commits", path):
+        return 300
     if path.endswith("/branches") or "/branches?" in path:
         return 120
     return 30

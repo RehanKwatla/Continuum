@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { queryKeys } from "@/lib/query-keys";
-import { getDashboard, getHealth, getRootIndex } from "@/services/dashboard";
+import { getDashboard, getHealth, getRepositoryActivity, getRootIndex } from "@/services/dashboard";
 import { fetchReadiness } from "@/services/auth";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -11,6 +11,18 @@ export function useDashboard() {
     queryKey: queryKeys.dashboard,
     queryFn: getDashboard,
     enabled: status === "authenticated",
+  });
+}
+
+export function useRepositoryActivity() {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: ["dashboard", "repository-activity"],
+    queryFn: getRepositoryActivity,
+    enabled: status === "authenticated",
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 }
 

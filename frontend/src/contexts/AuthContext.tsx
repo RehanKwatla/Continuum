@@ -70,12 +70,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsDevSession(false);
       setIsDemoSession(false);
       setIsDemoReadOnly(false);
-      if (caught instanceof ApiClientError && caught.status === 503) {
-        // recognised token but the backend has no verifier configured
-        setError(caught.message);
-      } else {
-        setError(null);
-      }
+      // Keep the safe, normalised API message so frictionless demo routes can
+      // explain why their queries are disabled and offer a session retry.
+      setError(
+        caught instanceof ApiClientError
+          ? caught.message
+          : caught instanceof Error
+            ? caught.message
+            : "Could not establish a session with the Continuum API.",
+      );
       setStatus("unauthenticated");
     }
   }, [applySession]);

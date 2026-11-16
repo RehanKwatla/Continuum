@@ -35,7 +35,8 @@ import {
   SourceTypeBadge,
 } from "@/components/common/StatusBadge";
 import { useToast } from "@/components/ui/toast";
-import { useDashboard } from "@/hooks/use-dashboard";
+import { useDashboard, useRepositoryActivity } from "@/hooks/use-dashboard";
+import { useAuth } from "@/contexts/AuthContext";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { usePublicDemo, useResetPublicDemo } from "@/hooks/use-demo";
 import { useWorkspaces } from "@/hooks/use-workspaces";
@@ -45,6 +46,8 @@ import {
   SOURCE_TYPE_META,
 } from "@/lib/source-meta";
 import type { ProcessingStatus, SourceType } from "@/types";
+import type { RepositoryActivity } from "@/types";
+import { ApiClientError, toErrorMessage } from "@/services/api";
 
 function Breakdown({
   title,
@@ -100,19 +103,118 @@ function Breakdown({
   );
 }
 
-function VelocityChart({ score }: { score: number | string }) {
+type ActivityRange = "1D" | "1W" | "1M" | "6M" | "1Y";
+type ActivityBucket = { start: number; end: number; label: string; count: number };
+
+function activityBuckets(data: RepositoryActivity, range: ActivityRange, now: Date): ActivityBucket[] {
+  const dateOptions: Intl.DateTimeFormatOptions = { timeZone: "UTC" };
+  const makeLabel = (date: Date, options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(undefined, { ...dateOptions, ...options }).format(date);
+  let starts: Date[] = [];
+  let nextStart: (date: Date) => Date;
+  let labelOptions: Intl.DateTimeFormatOptions;
+
+  if (range === "1D") {
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours()));
+    starts = Array.from({ length: 24 }, (_, index) => new Date(end.getTime() - (23 - index) * 60 * 60 * 1000));
+    nextStart = (date) => new Date(date.getTime() + 60 * 60 * 1000);
+    labelOptions = { hour: "numeric" };
+  } else if (range === "1W" || range === "1M") {
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const days = range === "1W" ? 7 : 30;
+    starts = Array.from({ length: days }, (_, index) => new Date(end.getTime() - (days - 1 - index) * 24 * 60 * 60 * 1000));
+    nextStart = (date) => new Date(date.getTime() + 24 * 60 * 60 * 1000);
+    labelOptions = range === "1W" ? { weekday: "short" } : { month: "short", day: "numeric" };
+  } else if (range === "6M") {
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const mondayOffset = (end.getUTCDay() + 6) % 7;
+    end.setUTCDate(end.getUTCDate() - mondayOffset);
+    starts = Array.from({ length: 26 }, (_, index) => new Date(end.getTime() - (25 - index) * 7 * 24 * 60 * 60 * 1000));
+    nextStart = (date) => new Date(date.getTime() + 7 * 24 * 60 * 60 * 1000);
+    labelOptions = { month: "short", day: "numeric" };
+  } else {
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    starts = Array.from({ length: 12 }, (_, index) => new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 11 + index, 1)));
+    nextStart = (date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
+    labelOptions = { month: "short" };
+  }
+
+  const buckets = starts.map((start) => ({ start: start.getTime(), end: nextStart(start).getTime(), label: makeLabel(start, labelOptions), count: 0 }));
+  for (const commit of data.commits) {
+    const timestamp = Date.parse(commit.committed_at);
+    if (!Number.isFinite(timestamp)) continue;
+    const bucket = buckets.find((item) => timestamp >= item.start && timestamp < item.end);
+    if (bucket) bucket.count += 1;
+  }
+  return buckets;
+}
+
+function RepositoryActivityChart({ activity, isLoading, error, onRetry }: {
+  activity: RepositoryActivity | undefined;
+  isLoading: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
   const [range, setRange] = React.useState<"1D" | "1W" | "1M" | "6M" | "1Y">("1M");
   const ranges = ["1D", "1W", "1M", "6M", "1Y"] as const;
+  const now = React.useMemo(() => new Date(), [activity, range]);
+  const buckets = React.useMemo(() => activity ? activityBuckets(activity, range, now) : [], [activity, range, now]);
+  const maxCount = Math.max(1, ...buckets.map((item) => item.count));
+  const plotLeft = 45;
+  const plotRight = 800;
+  const plotTop = 24;
+  const plotBottom = 176;
+  const points = buckets.map((bucket, index) => ({
+    x: buckets.length < 2 ? (plotLeft + plotRight) / 2 : plotLeft + index * (plotRight - plotLeft) / (buckets.length - 1),
+    y: plotBottom - (bucket.count / maxCount) * (plotBottom - plotTop),
+    ...bucket,
+  }));
+  const linePath = points.map((point, index) => `${index ? "L" : "M"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+  const areaPath = points.length ? `${linePath} L ${plotRight} ${plotBottom} L ${plotLeft} ${plotBottom} Z` : "";
+  const peak = points.reduce<typeof points[number] | null>((best, point) => point.count > (best?.count ?? 0) ? point : best, null);
+  const labels = Array.from(new Set([0, Math.round((buckets.length - 1) / 4), Math.round((buckets.length - 1) / 2), Math.round(3 * (buckets.length - 1) / 4), buckets.length - 1])).filter((index) => index >= 0 && index < buckets.length);
+  const retryAt = error instanceof ApiClientError ? Number(error.details.retry_at) : NaN;
+  const errorMessage = error instanceof ApiClientError && error.code === "github_rate_limited"
+    ? Number.isFinite(retryAt) && retryAt > 0
+      ? `GitHub is rate limiting this request. Retry after ${new Date(retryAt * 1000).toLocaleTimeString()}.`
+      : "GitHub is rate limiting this request. Wait briefly, then retry."
+    : error ? toErrorMessage(error) : "";
+  const earliestCommit = activity?.commits.reduce<string | null>((oldest, commit) => !oldest || Date.parse(commit.committed_at) < Date.parse(oldest) ? commit.committed_at : oldest, null);
+  const latestCommit = activity?.commits.reduce<string | null>((latest, commit) => !latest || Date.parse(commit.committed_at) > Date.parse(latest) ? commit.committed_at : latest, null);
+  const sampleTimestamps = activity?.commits.map((commit) => Date.parse(commit.committed_at)).filter(Number.isFinite) ?? [];
+  const sampleStart = sampleTimestamps.length ? Math.min(...sampleTimestamps) : null;
+  const sampleEnd = sampleTimestamps.length ? Math.max(...sampleTimestamps) : null;
+  const containsFullSample = (candidate: ActivityRange) => {
+    if (sampleStart === null || sampleEnd === null || !activity) return false;
+    const candidateBuckets = activityBuckets(activity, candidate, now);
+    const first = candidateBuckets[0];
+    const last = candidateBuckets[candidateBuckets.length - 1];
+    return Boolean(first && last && sampleStart >= first.start && sampleEnd < last.end);
+  };
+  const containsLatestCommit = (candidate: ActivityRange) => {
+    if (sampleEnd === null || !activity) return false;
+    const candidateBuckets = activityBuckets(activity, candidate, now);
+    const first = candidateBuckets[0];
+    const last = candidateBuckets[candidateBuckets.length - 1];
+    return Boolean(first && last && sampleEnd >= first.start && sampleEnd < last.end);
+  };
+  const fullSampleRange = ranges.find(containsFullSample);
+  const latestCommitRange = ranges.find(containsLatestCommit);
+  const suggestedRange = fullSampleRange ?? latestCommitRange;
+  const suggestedRangeCoversSample = Boolean(fullSampleRange);
+  const coverage = earliestCommit && latestCommit
+    ? `${new Date(earliestCommit).toLocaleDateString()} – ${new Date(latestCommit).toLocaleDateString()}`
+    : "No dated commits in the sample";
 
   return (
     <Card className="overflow-hidden border-border bg-card shadow-sm">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between space-y-0 pb-3">
         <div>
           <CardTitle className="text-base font-semibold text-foreground">
-            Continuity &amp; Verification Velocity
+            Continuum Repository Activity
           </CardTitle>
           <CardDescription className="text-xs text-muted-foreground mt-0.5">
-            Deterministic claim verification rate, evidence linkage, and handover maturity trajectory
+            Commit volume on the default branch of RehanKwatla/Continuum
           </CardDescription>
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-border bg-secondary/80 p-1">
@@ -120,6 +222,7 @@ function VelocityChart({ score }: { score: number | string }) {
             <button
               key={r}
               type="button"
+              aria-pressed={range === r}
               onClick={() => setRange(r)}
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-all",
@@ -133,81 +236,54 @@ function VelocityChart({ score }: { score: number | string }) {
           ))}
         </div>
       </CardHeader>
-      <CardContent className="pt-2">
-        <div className="relative h-52 w-full">
-          <svg viewBox="0 0 820 220" className="h-full w-full overflow-visible" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="velocityGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#C995BC" stopOpacity="0.30" />
-                <stop offset="65%" stopColor="#8E738B" stopOpacity="0.08" />
-                <stop offset="100%" stopColor="#18131E" stopOpacity="0.0" />
-              </linearGradient>
-              <filter id="velocityGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            {/* Grid horizontal guidelines */}
-            <line x1="20" y1="30" x2="800" y2="30" stroke="rgba(142, 115, 139, 0.14)" strokeDasharray="3,3" />
-            <line x1="20" y1="85" x2="800" y2="85" stroke="rgba(142, 115, 139, 0.14)" strokeDasharray="3,3" />
-            <line x1="20" y1="140" x2="800" y2="140" stroke="rgba(142, 115, 139, 0.14)" strokeDasharray="3,3" />
-            <line x1="20" y1="195" x2="800" y2="195" stroke="rgba(142, 115, 139, 0.22)" />
-
-            {/* Area fill under curve */}
-            <path
-              d="M 20 65 Q 60 75, 110 110 T 200 130 T 290 145 T 380 135 T 470 142 T 560 115 T 650 135 T 740 120 T 800 60 L 800 195 L 20 195 Z"
-              fill="url(#velocityGrad)"
-            />
-
-            {/* Stroke path */}
-            <path
-              d="M 20 65 Q 60 75, 110 110 T 200 130 T 290 145 T 380 135 T 470 142 T 560 115 T 650 135 T 740 120 T 800 60"
-              fill="none"
-              stroke="#C995BC"
-              strokeWidth="2.6"
-              filter="url(#velocityGlow)"
-              strokeLinecap="round"
-            />
-
-            {/* Vertical dashed checkpoint guideline at peak */}
-            <line
-              x1="560"
-              y1="20"
-              x2="560"
-              y2="195"
-              stroke="#8E738B"
-              strokeWidth="1.5"
-              strokeDasharray="4,4"
-              strokeOpacity="0.7"
-            />
-
-            {/* Checkpoint node circle */}
-            <circle cx="560" cy="115" r="5" fill="#C995BC" filter="url(#velocityGlow)" />
-            <circle cx="560" cy="115" r="9" fill="none" stroke="#C995BC" strokeWidth="1.8" strokeOpacity="0.6" />
-          </svg>
-
-          {/* Floating glass tooltip */}
-          <div className="absolute left-[64%] top-[14px] rounded-lg border border-border/80 bg-card/95 px-3 py-2 shadow-xl backdrop-blur-md">
-            <div className="text-[11px] font-mono text-muted-foreground">Active Milestone • Handover Verified</div>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-sm font-bold text-foreground">{score}% Verified</span>
-              <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[11px] font-medium text-emerald-400">
-                +3.5%
-              </span>
-            </div>
+      <CardContent className="space-y-3 pt-2">
+        {isLoading ? <Skeleton className="h-52 w-full" /> : error ? (
+          <div className="flex min-h-52 flex-col items-center justify-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 text-center" role="alert">
+            <p className="max-w-xl text-sm text-foreground">{errorMessage}</p>
+            <Button size="sm" variant="outline" onClick={onRetry}>Retry activity</Button>
           </div>
-        </div>
-
-        {/* Month labels */}
-        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground/80 font-mono px-2">
-          <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span>
-          <span className="font-bold text-primary">Jun</span>
-          <span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span>
-        </div>
+        ) : activity ? <>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <a href={activity.repository_url} target="_blank" rel="noreferrer" className="font-medium text-primary underline-offset-4 hover:underline">RehanKwatla/Continuum ↗</a>
+            <span>{activity.branch} · {activity.sampled_commits} commits sampled · {coverage}</span>
+          </div>
+          <div className="relative h-52 w-full" role="img" aria-label={`Commit activity for ${activity.repository_url}, ${range} range, peak ${peak?.count ?? 0} commits per interval`}>
+            <svg viewBox="0 0 820 220" className="h-full w-full overflow-visible" preserveAspectRatio="none" aria-hidden="true">
+              <title>Commits per interval</title>
+              <desc>Counts are derived from commit timestamps returned by GitHub for the Continuum repository.</desc>
+              <defs><linearGradient id="repoActivityGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#C995BC" stopOpacity="0.28" /><stop offset="100%" stopColor="#18131E" stopOpacity="0" /></linearGradient></defs>
+              {[0, 0.5, 1].map((ratio) => {
+                const y = plotTop + ratio * (plotBottom - plotTop);
+                const value = Math.round(maxCount * (1 - ratio));
+                return <g key={ratio}><line x1={plotLeft} y1={y} x2={plotRight} y2={y} stroke="rgba(142, 115, 139, 0.18)" strokeDasharray={ratio === 1 ? undefined : "3,4"} /><text x="2" y={y + 4} fontSize="10" fill="currentColor" className="text-muted-foreground">{value}</text></g>;
+              })}
+              {points.length > 1 && <path d={areaPath} fill="url(#repoActivityGrad)" />}
+              {points.length > 1 && <path d={linePath} fill="none" stroke="#C995BC" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />}
+              {peak && peak.count > 0 && <><line x1={peak.x} y1={plotTop} x2={peak.x} y2={plotBottom} stroke="#8E738B" strokeWidth="1.5" strokeDasharray="4,4" /><circle cx={peak.x} cy={peak.y} r="5" fill="#C995BC" /><circle cx={peak.x} cy={peak.y} r="9" fill="none" stroke="#C995BC" strokeWidth="1.8" strokeOpacity="0.65" /></>}
+            </svg>
+          </div>
+          {peak && peak.count > 0 && <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/70 bg-secondary/40 px-3 py-2">
+            <div className="text-[11px] font-mono text-muted-foreground">Peak interval · {peak.label}</div>
+            <div className="text-sm font-semibold text-foreground">{peak.count} {peak.count === 1 ? "commit" : "commits"}</div>
+          </div>}
+          {activity.sampled_commits === 0 ? <div className="rounded-md border border-dashed border-border px-3 py-3 text-sm text-muted-foreground" role="status" aria-live="polite">No dated commits are available in the returned repository sample.</div> : points.every((point) => point.count === 0) && <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-border px-3 py-3" role="status" aria-live="polite">
+            <div className="text-sm text-muted-foreground">
+              <p>No commits fell inside this {range} range.</p>
+              <p className="mt-1 text-xs">The returned sample covers {coverage} ({activity.sampled_commits} commits).</p>
+              {suggestedRange && suggestedRange !== range && !suggestedRangeCoversSample && <p className="mt-1 text-xs">That wider range includes the latest sampled commit; older sampled commits may still fall outside it.</p>}
+              {!suggestedRange && <p className="mt-1 text-xs">The sample is outside the available 1D–1Y chart ranges.</p>}
+            </div>
+            {suggestedRange && suggestedRange !== range && <Button type="button" size="sm" variant="outline" aria-label={suggestedRangeCoversSample ? `View ${suggestedRange} activity containing the sampled commits` : `View ${suggestedRange} activity around the latest sampled commit`} onClick={() => setRange(suggestedRange)}>
+              View {suggestedRange} activity
+            </Button>}
+          </div>}
+          <div className="flex items-center justify-between gap-1 px-2 text-[11px] font-mono text-muted-foreground" aria-hidden="true">
+            {labels.map((index) => <span key={index} className={index === labels[labels.length - 1] ? "text-primary" : ""}>{buckets[index]?.label}</span>)}
+          </div>
+          <p className="border-t border-border/70 pt-2 text-[11px] text-muted-foreground">{activity.note}</p>
+        </> : (
+          <div className="flex min-h-52 items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">Repository activity is not available yet.</div>
+        )}
       </CardContent>
     </Card>
   );
@@ -215,7 +291,9 @@ function VelocityChart({ score }: { score: number | string }) {
 
 export default function Dashboard() {
   usePageTitle("Dashboard");
+  const auth = useAuth();
   const dashboard = useDashboard();
+  const repositoryActivity = useRepositoryActivity();
   const workspaces = useWorkspaces();
   const demo = usePublicDemo();
   const resetDemo = useResetPublicDemo();
@@ -275,7 +353,7 @@ export default function Dashboard() {
     />
           );
 
-          if (dashboard.isLoading) {
+          if (auth.status === "loading" || dashboard.isLoading) {
     return (
           <div className="space-y-6">
             {header}
@@ -293,6 +371,19 @@ export default function Dashboard() {
           );
   }
 
+          if (auth.status === "unauthenticated") {
+    return (
+          <div className="space-y-6">
+            {header}
+            <ErrorState
+              title="Could not connect to the Public Demo workspace"
+              error={auth.error ?? new Error("The demo session is unavailable. Please retry shortly.")}
+              onRetry={() => void auth.refresh()}
+            />
+          </div>
+          );
+  }
+
           if (dashboard.isError) {
     return (
           <div className="space-y-6">
@@ -303,7 +394,18 @@ export default function Dashboard() {
   }
 
           const data = dashboard.data;
-          if (!data) return null;
+          if (!data) {
+    return (
+          <div className="space-y-6">
+            {header}
+            <ErrorState
+              title="Dashboard data was unavailable"
+              error={dashboard.error ?? new Error("The API returned no dashboard data. Please retry.")}
+              onRetry={() => void dashboard.refetch()}
+            />
+          </div>
+          );
+  }
 
           return (
           <div className="space-y-6">
@@ -435,7 +537,12 @@ export default function Dashboard() {
             </div>
 
             {/* Velocity Chart */}
-            <VelocityChart score={demo.data?.counts?.readiness_score ?? "98.2"} />
+            <RepositoryActivityChart
+              activity={repositoryActivity.data}
+              isLoading={repositoryActivity.isLoading}
+              error={repositoryActivity.error}
+              onRetry={() => void repositoryActivity.refetch()}
+            />
 
             {/* Featured Continuity Sections: Review, Conflict, Handover & Highlight */}
             {demoProjectId ? (

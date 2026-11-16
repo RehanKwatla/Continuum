@@ -8,12 +8,16 @@ import type { DashboardStats } from "@/types";
 
 const mocks = vi.hoisted(() => ({
   useDashboard: vi.fn(),
+  useRepositoryActivity: vi.fn(),
   useWorkspaces: vi.fn(),
   usePublicDemo: vi.fn(),
   useResetPublicDemo: vi.fn(),
 }));
 
-vi.mock("@/hooks/use-dashboard", () => ({ useDashboard: mocks.useDashboard }));
+vi.mock("@/hooks/use-dashboard", () => ({
+  useDashboard: mocks.useDashboard,
+  useRepositoryActivity: mocks.useRepositoryActivity,
+}));
 vi.mock("@/hooks/use-workspaces", () => ({
   useWorkspaces: mocks.useWorkspaces,
   useCreateWorkspace: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -73,6 +77,19 @@ function renderDashboard() {
 
 describe("Dashboard", () => {
   beforeEach(() => {
+    mocks.useRepositoryActivity.mockReturnValue({
+      data: {
+        repository_url: "https://github.com/RehanKwatla/Continuum",
+        branch: "main",
+        sampled_commits: 0,
+        sample_limit: 100,
+        note: "Counts use at most the 100 newest commits returned by GitHub.",
+        commits: [],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
     mocks.useWorkspaces.mockReturnValue({
       data: [{ id: "22222222-2222-2222-2222-222222222222", name: "Continuum Demo Workspace" }],
       isSuccess: true,

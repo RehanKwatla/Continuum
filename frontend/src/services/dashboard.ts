@@ -1,9 +1,13 @@
 import { apiGet } from "@/services/api";
 import { env } from "@/lib/env";
-import type { DashboardStats, HealthResponse } from "@/types";
+import type { DashboardStats, HealthResponse, RepositoryActivity } from "@/types";
 
 export function getDashboard(): Promise<DashboardStats> {
   return apiGet<DashboardStats>("/dashboard");
+}
+
+export function getRepositoryActivity(): Promise<RepositoryActivity> {
+  return apiGet<RepositoryActivity>("/dashboard/repository-activity");
 }
 
 export function getHealth(): Promise<HealthResponse> {

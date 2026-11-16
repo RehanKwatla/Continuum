@@ -249,6 +249,15 @@ Requires: authenticated user. Aggregates computed live from PostgreSQL — **nev
 
 `upcoming` is an explicit acknowledgement that Phase 3 is **not** implemented.
 
+### `GET /dashboard/repository-activity`
+Requires: authenticated user. Returns real commit timestamps from the public
+`RehanKwatla/Continuum` repository's default branch for the dashboard activity
+chart. The response is limited to the newest 100 commits and states that older
+history can fall outside the sample. GitHub requests are made server-side,
+cached for five minutes, and use `GITHUB_TOKEN` when configured with public
+unauthenticated access as a fallback. GitHub rate limits are returned as 429
+with retry details; temporary upstream failures return 503.
+
 ---
 
 ## 7. Sources (upload & ingestion)
@@ -470,6 +479,7 @@ required.
 | PATCH | `/api/v1/projects/{project_id}` | member | Update project |
 | DELETE | `/api/v1/projects/{project_id}` | admin | Delete project |
 | GET | `/api/v1/dashboard` | auth | Dashboard totals |
+| GET | `/api/v1/dashboard/repository-activity` | auth | Recent real commit activity for the Continuum repository |
 | POST | `/api/v1/projects/{project_id}/sources/upload` | member | Upload files |
 | GET | `/api/v1/projects/{project_id}/sources` | viewer | List sources |
 | GET | `/api/v1/sources/{source_id}` | viewer | Source detail |
