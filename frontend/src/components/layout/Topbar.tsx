@@ -63,7 +63,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-md sm:px-6 lg:px-10">
+    <header className="sticky top-0 z-40 flex min-h-16 items-center gap-2 border-b border-border bg-background/85 px-3 py-2 backdrop-blur-md sm:h-16 sm:gap-3 sm:px-6 sm:py-0 lg:px-10">
       <Button
         variant="ghost"
         size="icon"
@@ -111,7 +111,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
         })}
       </nav>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
         <Tooltip
           className="hidden sm:inline-flex"
           label={health.data ? `API v${health.data.version}` : "API unreachable"}
@@ -135,9 +135,10 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
         {/* Small unobtrusive label demanded by judge access requirements */}
         <Badge
           variant="outline"
-          className="border-primary/40 bg-primary/10 text-primary font-mono text-[11px] font-semibold tracking-wider uppercase px-2.5 py-0.5"
+          className="shrink-0 border-primary/40 bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wide text-primary sm:px-2.5 sm:text-[11px] sm:tracking-wider"
         >
-          PUBLIC DEMO ENVIRONMENT
+          <span className="sm:hidden">DEMO</span>
+          <span className="hidden sm:inline">PUBLIC DEMO ENVIRONMENT</span>
         </Badge>
 
         {isDevSession ? (
@@ -147,7 +148,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
         ) : null}
 
         {/* Toggle switch in the UI/UX to change theme between dark and light */}
-        <ThemeToggle />
+        <ThemeToggle className="shrink-0" size="sm" />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
